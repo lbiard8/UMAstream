@@ -1,0 +1,74 @@
+:root {
+  --bg: #0f1115;
+  --card: #181b22;
+  --border: #2a2f3a;
+  --text: #e6e8ee;
+  --muted: #8b93a7;
+  --accent: #7c5cff;
+  --danger: #e5484d;
+  --live: #ff3b5c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header { text-align: center; padding: 32px 16px 8px; }
+h1 { margin: 0; font-size: 2rem; letter-spacing: -0.02em; }
+h1 span { color: var(--accent); }
+.tagline { color: var(--muted); margin: 6px 0 0; }
+
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+label { color: var(--muted); }
+
+select, input, button {
+  font: inherit;
+  color: var(--text);
+  background: #222631;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); font-weight: 600; }
+button.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+
+.share { display: flex; gap: 8px; flex: 1; min-width: 260px; }
+.share input { flex: 1; min-width: 0; }
+
+.live { margin: 0; font-weight: 600; width: 100%; }
+.dot {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--live); margin-right: 4px; animation: pulse 1.5s infinite;
+}
+@keyframes pulse { 50% { opacity: 0.3; } }
+
+video { width: 100%; border-radius: 12px; background: #000; display: block; }
+#preview { max-height: 360px; object-fit: contain; }
+
+.player video { aspect-ratio: 16 / 9; object-fit: contain; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.stats { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; }
+
+.status { color: var(--muted); text-align: center; }
+.status.error { color: var(--danger); }

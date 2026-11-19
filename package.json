@@ -1,0 +1,22 @@
+{
+  "name": "umastream",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Partage d'écran en haute qualité dans le navigateur, via WebRTC.",
+  "scripts": {
+    "build:client": "esbuild client/main.ts --bundle --format=esm --sourcemap --outfile=public/app.js",
+    "dev": "npm run build:client && tsx server/server.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

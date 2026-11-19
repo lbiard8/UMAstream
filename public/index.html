@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UMAstream</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>UMA<span>stream</span></h1>
+    <p class="tagline">Partage ton écran en vraie qualité, sans compte, sans installation.</p>
+  </header>
+
+  <main>
+    <!-- Vue "streamer" : affichée quand il n'y a pas de ?room= dans l'URL -->
+    <section id="streamer-view" hidden>
+      <div class="card">
+        <label for="quality">Qualité</label>
+        <select id="quality">
+          <option value="1080p60">1080p · 60 fps (jeux, fluide)</option>
+          <option value="1080p30">1080p · 30 fps (texte, code, net)</option>
+          <option value="1440p60">1440p · 60 fps (grosse connexion)</option>
+          <option value="source">Résolution native de l'écran</option>
+        </select>
+        <button id="start-btn" class="primary">Partager mon écran</button>
+      </div>
+
+      <div id="live-panel" class="card" hidden>
+        <p class="live"><span class="dot"></span> En direct · <span id="viewer-count">0</span> spectateur(s)</p>
+        <div class="share">
+          <input id="share-link" readonly />
+          <button id="copy-btn">Copier le lien</button>
+        </div>
+        <button id="stop-btn" class="danger">Arrêter le partage</button>
+      </div>
+
+      <video id="preview" autoplay muted playsinline hidden></video>
+    </section>
+
+    <!-- Vue "spectateur" : affichée quand l'URL contient ?room=... -->
+    <section id="viewer-view" hidden>
+      <div class="player">
+        <video id="remote" autoplay muted playsinline></video>
+        <div class="controls">
+          <button id="unmute-btn">🔊 Activer le son</button>
+          <button id="fullscreen-btn">⛶ Plein écran</button>
+          <span id="stats" class="stats"></span>
+        </div>
+      </div>
+    </section>
+
+    <p id="status" class="status"></p>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
