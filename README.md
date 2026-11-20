@@ -44,6 +44,24 @@ Ferme puis rouvre ton terminal, puis lance `npm run share`. L'adresse publique s
 > Sur certains réseaux (Wi-Fi d'université, réseau d'entreprise), les PC ne peuvent pas se joindre entre eux :
 > le lien « réseau local » ne marchera pas, utilise `npm run share`.
 
+## Mot de passe
+
+Le streamer choisit un **mot de passe obligatoire** avant de partager. Les spectateurs doivent le taper pour regarder.
+
+- **Il ne fait jamais partie du lien** : envoie-le à part (en vocal, en message privé). Si le lien fuit, le mot de
+  passe ne fuit pas avec.
+- **C'est le serveur qui vérifie**, et il ne garde que l'empreinte du mot de passe (`scrypt` + sel aléatoire),
+  jamais le mot de passe en clair. La comparaison se fait en temps constant (`timingSafeEqual`).
+- **Tant que le mot de passe n'est pas bon, le streamer n'est même pas prévenu** : aucune connexion WebRTC n'est
+  lancée, donc un inconnu ne reçoit jamais ton adresse IP (en passant par le tunnel).
+- **5 essais maximum par adresse IP**, avec une pause croissante entre chaque essai (0 s, 0,5 s, 1 s…). Après la
+  5e erreur, cette IP est bloquée **5 minutes**, même en rechargeant la page. Les autres spectateurs ne sont pas
+  touchés. Via le tunnel, l'IP réelle est lue dans l'en-tête `cf-connecting-ip` envoyé par Cloudflare.
+- Le mot de passe est fixé pour toute la durée du stream, et il n'est retenu ni par le navigateur du streamer ni
+  par celui des spectateurs.
+
+> Deux personnes derrière la même box partagent la même IP : si l'une se trompe 5 fois, l'autre est bloquée aussi.
+
 ## Qualité côté streamer
 
 Avant de partager, le streamer choisit une **résolution** (Native, 1440p, 1080p, 720p, 480p, 360p) et un nombre
@@ -102,14 +120,15 @@ Chaque spectateur choisit sa qualité dans **⚙️ Options** : **Max** (celle d
 shared/messages.ts   Types des messages WebSocket (partagés client/serveur)
 server/server.ts     Serveur HTTP (fichiers du site) + signalisation WebSocket
 server/network.ts    Adresses joignables par les autres PC : IP locale et tunnel Cloudflare
+server/password.ts   Mot de passe des salons : hachage scrypt, vérification, limite d'essais par IP
 client/main.ts       Code navigateur : mode streamer et mode spectateur
 public/              main-page.html (servie sur "/"), style.css, app.js (généré)
 ```
 
 ## Comment ça marche
 
-1. Le streamer capture son écran (`getDisplayMedia`) et demande un salon au serveur.
-2. Un spectateur ouvre le lien `?room=…` ; le serveur prévient le streamer.
+1. Le streamer capture son écran (`getDisplayMedia`) et demande un salon au serveur, avec un mot de passe.
+2. Un spectateur ouvre le lien `?room=…` et tape le mot de passe ; s'il est bon, le serveur prévient le streamer.
 3. Les deux navigateurs s'échangent offre, réponse et candidats ICE **via le serveur**.
 4. Ensuite la vidéo passe **en direct** entre les navigateurs (pair à pair). Le serveur ne voit jamais la vidéo.
 

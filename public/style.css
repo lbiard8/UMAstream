@@ -115,5 +115,8 @@ header { position: relative; }
 }
 .check { display: flex; align-items: center; gap: 8px; color: var(--text); cursor: pointer; }
 
+.password-error { margin: 0; width: 100%; color: var(--danger); }
+.password-error:empty { display: none; }
+
 .status { color: var(--muted); text-align: center; }
 .status.error { color: var(--danger); }

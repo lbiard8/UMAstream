@@ -131,7 +131,18 @@ function startStreamerMode() {
     return streamQuality(resolution, isFps(fps) ? fps : 60);
   };
 
+  const passwordInput = $<HTMLInputElement>("stream-password");
+
   startBtn.addEventListener("click", async () => {
+    // Mot de passe obligatoire : on vérifie AVANT d'ouvrir la fenêtre de choix d'écran.
+    // (Le serveur revérifie de son côté : on ne fait jamais confiance au seul navigateur.)
+    const password = passwordInput.value;
+    if (password.length === 0) {
+      setStatus("Choisis un mot de passe : tes spectateurs devront le taper pour regarder.", true);
+      passwordInput.focus();
+      return;
+    }
+
     // `let` : la qualité peut changer pendant le stream (menus Résolution / Fps)
     let quality = selectedQuality();
 
@@ -169,6 +180,7 @@ function startStreamerMode() {
     preview.srcObject = stream;
     preview.hidden = false;
     startBtn.disabled = true;
+    passwordInput.disabled = true; // le mot de passe est fixé pour toute la durée du stream
     // Les menus Résolution / Fps restent actifs : ils changent la qualité en direct (voir étape 6)
 
     // 2. Connexion au serveur de signalisation
@@ -273,7 +285,7 @@ function startStreamerMode() {
       }
     });
 
-    ws.addEventListener("open", () => send({ type: "create-room" }));
+    ws.addEventListener("open", () => send({ type: "create-room", password }));
     ws.addEventListener("close", () => setStatus("Connexion au serveur perdue.", true));
 
     // 4. Arrêt : bouton "Arrêter" ou bouton natif du navigateur ("Arrêter le partage")
@@ -493,11 +505,45 @@ function startViewerMode(roomId: string) {
   const qualitySelect = $<HTMLSelectElement>("viewer-quality");
   qualitySelect.value = viewerQuality;
 
+  // Formulaire du mot de passe
+  const passwordForm = $<HTMLFormElement>("password-form");
+  const passwordInput = $<HTMLInputElement>("viewer-password");
+  const passwordBtn = $<HTMLButtonElement>("password-btn");
+  const passwordError = $("password-error");
+
   setStatus("Connexion au salon…");
 
   const { ws, send } = connect(async (msg) => {
     switch (msg.type) {
+      case "password-required":
+        // Le salon existe : on demande le mot de passe (le streamer ne sait même pas qu'on est là)
+        setStatus("");
+        passwordForm.hidden = false;
+        passwordInput.focus();
+        break;
+
+      case "password-wrong":
+        passwordError.textContent = `Mot de passe incorrect : ${msg.attemptsLeft} essai(s) restant(s).`;
+        passwordInput.value = "";
+        passwordBtn.disabled = false;
+        passwordInput.focus();
+        break;
+
+      case "blocked": {
+        // Trop d'erreurs depuis cette adresse IP : le serveur coupe la connexion
+        const minutes = Math.ceil(msg.retryAfterSeconds / 60);
+        passwordForm.hidden = false;
+        passwordError.textContent = `Trop d'essais. Réessaie dans ${minutes} minute(s), en rechargeant la page.`;
+        passwordInput.disabled = true;
+        passwordBtn.disabled = true;
+        setStatus("");
+        break;
+      }
+
       case "joined":
+        // Bon mot de passe : on cache le formulaire et on affiche le lecteur
+        passwordForm.hidden = true;
+        $("player").hidden = false;
         setStatus("En attente du flux vidéo…");
         break;
 
@@ -546,7 +592,16 @@ function startViewerMode(roomId: string) {
     }
   });
 
+  // 1er contact sans mot de passe : le serveur répond "password-required" si le salon existe
   ws.addEventListener("open", () => send({ type: "join-room", roomId }));
+
+  passwordForm.addEventListener("submit", (e) => {
+    e.preventDefault(); // sinon le navigateur rechargerait la page en envoyant le formulaire
+    if (passwordInput.value.length === 0) return;
+    passwordBtn.disabled = true; // un seul essai à la fois
+    passwordError.textContent = "";
+    send({ type: "join-room", roomId, password: passwordInput.value });
+  });
 
   // Les navigateurs bloquent la lecture automatique AVEC son : on démarre muet,
   // et l'utilisateur clique pour activer le son.
