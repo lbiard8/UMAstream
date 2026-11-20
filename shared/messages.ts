@@ -7,6 +7,9 @@ export type SignalData =
   | { kind: "offer" | "answer"; sdp: string }
   | { kind: "ice"; candidate: RTCIceCandidateInit };
 
+/** Qui pourra ouvrir le lien : n'importe qui, le réseau local seulement, ou ce PC seulement. */
+export type ShareReach = "internet" | "lan" | "local";
+
 /** Messages envoyés par un navigateur au serveur. */
 export type ClientMessage =
   | { type: "create-room" }
@@ -16,7 +19,8 @@ export type ClientMessage =
 
 /** Messages envoyés par le serveur à un navigateur. */
 export type ServerMessage =
-  | { type: "room-created"; roomId: string }
+  // shareBase = début du lien à partager (tunnel internet, ou IP locale) ; absent = on garde l'adresse actuelle
+  | { type: "room-created"; roomId: string; shareBase?: string; reach: ShareReach }
   | { type: "joined"; roomId: string }
   | { type: "viewer-joined"; viewerId: string }
   | { type: "viewer-left"; viewerId: string }

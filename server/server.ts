@@ -8,9 +8,23 @@ import { extname, join, normalize, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
-import type { ClientMessage, ServerMessage } from "../shared/messages.js";
+import type { ClientMessage, ServerMessage, ShareReach } from "../shared/messages.js";
+import { getLanIp, startTunnel } from "./network.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
+// `npm run share` ajoute --tunnel : on crée alors une adresse publique via Cloudflare
+const WANT_TUNNEL = process.argv.includes("--tunnel");
+
+/** Adresse publique du tunnel, connue quelques secondes après le démarrage. */
+let tunnelUrl: string | null = null;
+const lanIp = await getLanIp();
+
+/** Début du lien à partager : le plus "large" possible (internet > réseau local > ce PC). */
+function shareInfo(): { shareBase?: string; reach: ShareReach } {
+  if (tunnelUrl) return { shareBase: tunnelUrl, reach: "internet" };
+  if (lanIp) return { shareBase: `http://${lanIp}:${PORT}`, reach: "lan" };
+  return { reach: "local" };
+}
 const PUBLIC_DIR = fileURLToPath(new URL("../public/", import.meta.url));
 
 // ---------------------------------------------------------------------------
@@ -95,7 +109,7 @@ function handleMessage(ws: WebSocket, msg: ClientMessage) {
       const roomId = newId();
       rooms.set(roomId, { streamer: ws, viewers: new Map() });
       peers.set(ws, { id: "streamer", roomId, role: "streamer" });
-      send(ws, { type: "room-created", roomId });
+      send(ws, { type: "room-created", roomId, ...shareInfo() });
       console.log(`[salon ${roomId}] créé`);
       break;
     }
@@ -148,6 +162,15 @@ function handleDisconnect(ws: WebSocket) {
   }
 }
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
   console.log(`UMAstream prêt sur http://localhost:${PORT}`);
+  if (lanIp) console.log(`  Réseau local : http://${lanIp}:${PORT}`);
+
+  if (WANT_TUNNEL) {
+    console.log("  Ouverture du tunnel Cloudflare…");
+    tunnelUrl = await startTunnel(PORT);
+    if (tunnelUrl) console.log(`  Internet     : ${tunnelUrl}   ← les liens générés utiliseront cette adresse`);
+  } else {
+    console.log("  (Pour un lien accessible depuis internet : npm run share)");
+  }
 });

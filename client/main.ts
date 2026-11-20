@@ -2,7 +2,7 @@
 //  - streamer   : pas de ?room= dans l'URL -> on capture l'écran et on crée un salon
 //  - spectateur : URL avec ?room=xxxx      -> on rejoint le salon et on affiche la vidéo
 
-import type { ClientMessage, ServerMessage, SignalData } from "../shared/messages.js";
+import type { ClientMessage, ServerMessage, ShareReach, SignalData } from "../shared/messages.js";
 
 // Serveur STUN public : il aide chaque navigateur à découvrir son adresse publique
 // pour traverser la box. (Pour les réseaux très fermés il faudra un serveur TURN : V2.)
@@ -20,6 +20,14 @@ const QUALITY = {
   source: { width: undefined, height: undefined, fps: 60, bitrate: 12_000_000, hint: "detail" },
 } as const;
 type QualityKey = keyof typeof QUALITY;
+
+// Explication affichée sous le lien, selon qui pourra l'ouvrir.
+// Record<ShareReach, string> : TypeScript exige un texte pour CHAQUE cas possible.
+const REACH_NOTE: Record<ShareReach, string> = {
+  internet: "🌍 Lien accessible depuis n'importe où.",
+  lan: "🏠 Lien valable seulement sur ton réseau (même box / Wi-Fi). Pour un lien internet : installe cloudflared puis lance npm run share",
+  local: "💻 Lien valable seulement sur ce PC. Pour un lien internet : installe cloudflared puis lance npm run share",
+};
 
 // --- Petits utilitaires ------------------------------------------------------
 
@@ -91,8 +99,15 @@ function startStreamerMode() {
     const { ws, send } = connect(async (msg) => {
       switch (msg.type) {
         case "room-created": {
-          const link = `${location.origin}/?room=${msg.roomId}`;
-          $<HTMLInputElement>("share-link").value = link;
+          // Le serveur connaît une adresse joignable par les autres PC (tunnel ou IP locale).
+          // location.origin vaudrait "http://localhost:3000", qui ne marche que sur CE PC.
+          const base = msg.shareBase ?? location.origin;
+          $<HTMLInputElement>("share-link").value = `${base}/?room=${msg.roomId}`;
+          $("reach-note").textContent = REACH_NOTE[msg.reach];
+          $("reach-note").dataset.reach = msg.reach;
+          // En pair à pair, chaque spectateur reçoit l'IP du streamer (candidats ICE).
+          // Inutile de prévenir si le lien ne sort pas de ce PC.
+          $("privacy-note").hidden = msg.reach === "local";
           $("live-panel").hidden = false;
           setStatus("Envoie le lien à tes potes !");
           break;
