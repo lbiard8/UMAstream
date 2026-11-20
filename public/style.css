@@ -56,6 +56,10 @@ button.danger { background: transparent; border-color: var(--danger); color: var
 .share { display: flex; gap: 8px; flex: 1; min-width: 260px; }
 .share input { flex: 1; min-width: 0; }
 
+.reach { margin: 0; width: 100%; font-size: 0.9rem; color: var(--muted); }
+.reach[data-reach="internet"] { color: #3dd68c; }
+.privacy { margin: 0; width: 100%; font-size: 0.9rem; color: #f5a524; }
+
 .live { margin: 0; font-weight: 600; width: 100%; }
 .dot {
   display: inline-block; width: 10px; height: 10px; border-radius: 50%;
