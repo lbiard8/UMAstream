@@ -95,8 +95,8 @@ video { width: 100%; border-radius: 12px; background: #000; display: block; }
   pointer-events: none; /* ne gêne pas les clics sur la vidéo */
 }
 
-/* Bandeau "Stream en pause", centré par-dessus la dernière image (qui reste visible derrière) */
-.pause-banner {
+/* Bandeau "Stream en pause" / "image masquée", centré par-dessus la dernière image (qui reste visible derrière) */
+.video-banner {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
   padding: 10px 20px; border-radius: 999px;
   background: rgba(0, 0, 0, 0.7); color: #fff;
@@ -129,6 +129,27 @@ header { position: relative; }
 
 .password-error { margin: 0; width: 100%; color: var(--danger); }
 .password-error:empty { display: none; }
+
+/* --- Streamer : 2 colonnes (réglages à gauche, spectateurs à droite) --- */
+.streamer-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.streamer-layout:not(.is-live) { grid-template-columns: minmax(0, 1fr); } /* avant le stream : pas de panneau */
+.streamer-main { min-width: 0; }
+/* Sur téléphone / petit écran : la liste passe sous le reste */
+@media (max-width: 800px) {
+  .streamer-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+.people-panel { flex-direction: column; align-items: stretch; gap: 8px; position: sticky; top: 16px; }
+.people-panel h2 { margin: 4px 0 0; font-size: 0.95rem; }
+.people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.people li {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; border-radius: 8px; background: #222631;
+}
+.people .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.people li.is-blind .name { color: var(--muted); }
+.people button { padding: 4px 8px; font-size: 1rem; line-height: 1; }
+.people-empty { margin: 0; color: var(--muted); font-size: 0.85rem; }
 
 .status { color: var(--muted); text-align: center; }
 .status.error { color: var(--danger); }

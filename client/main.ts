@@ -2,7 +2,14 @@
 //  - streamer   : pas de ?room= dans l'URL -> on capture l'écran et on crée un salon
 //  - spectateur : URL avec ?room=xxxx      -> on rejoint le salon et on affiche la vidéo
 
-import type { ClientMessage, ServerMessage, ShareReach, SignalData, ViewerQuality } from "../shared/messages.js";
+import {
+  MAX_NAME_LENGTH,
+  type ClientMessage,
+  type ServerMessage,
+  type ShareReach,
+  type SignalData,
+  type ViewerQuality,
+} from "../shared/messages.js";
 
 // Serveur STUN public : il aide chaque navigateur à découvrir son adresse publique
 // pour traverser la box. (Pour les réseaux très fermés il faudra un serveur TURN : V2.)
@@ -131,6 +138,19 @@ function startStreamerMode() {
   };
 
   const passwordInput = $<HTMLInputElement>("stream-password");
+  const autoAccept = $<HTMLInputElement>("auto-accept");
+
+  // On ne peut streamer que depuis le PC qui fait tourner UMAstream (le serveur le vérifie aussi).
+  // Page ouverte via le tunnel ou l'IP locale : on prévient tout de suite, avant de choisir l'écran.
+  const isLocalPage = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+  if (!isLocalPage) {
+    startBtn.disabled = true;
+    setStatus(
+      `Pour streamer, ouvre http://localhost:${location.port || "3000"} sur le PC qui fait tourner UMAstream. ` +
+        "Cette adresse sert seulement à regarder un stream.",
+      true,
+    );
+  }
 
   startBtn.addEventListener("click", async () => {
     // Mot de passe obligatoire : on vérifie AVANT d'ouvrir la fenêtre de choix d'écran.
@@ -189,8 +209,27 @@ function startStreamerMode() {
     const viewerQualities = new Map<string, ViewerQuality>();
     // Pause : la capture continue sur ce PC, mais plus rien n'est envoyé aux spectateurs (voir étape 7)
     let paused = false;
+    // Panneau de droite : pseudos des spectateurs, ceux rendus aveugles, et la salle d'attente
+    const viewerNames = new Map<string, string>(); // viewerId -> pseudo
+    const blindViewers = new Set<string>(); // ne reçoivent plus ni image ni son
+    const pendingRequests = new Map<string, string>(); // viewerId -> pseudo, en attente d'accord
     const updateCount = () => ($("viewer-count").textContent = String(peerConnections.size));
     startStreamerDiagnostics(peerConnections, () => quality.fps);
+
+    /**
+     * Envoie (ou coupe) l'image et le son vers UN spectateur, selon l'état actuel :
+     * rien n'est envoyé si le stream est en pause OU si ce spectateur est rendu aveugle.
+     * replaceTrack(null) coupe l'envoi sans fermer la connexion, replaceTrack(piste) le relance.
+     */
+    const updateSending = async (viewerId: string, pc: RTCPeerConnection) => {
+      const sending = !paused && !blindViewers.has(viewerId);
+      const audioTrack = stream.getAudioTracks()[0] ?? null;
+      for (const transceiver of pc.getTransceivers()) {
+        // receiver.track existe toujours (même si sender.track est vide) : il donne le type d'emplacement
+        const kind = transceiver.receiver.track.kind;
+        await transceiver.sender.replaceTrack(sending ? (kind === "video" ? videoTrack : audioTrack) : null);
+      }
+    };
 
     /**
      * Applique la qualité demandée par UN spectateur, sur SA connexion uniquement.
@@ -229,15 +268,36 @@ function startStreamerMode() {
           // Inutile de prévenir si le lien ne sort pas de ce PC.
           $("privacy-note").hidden = msg.reach === "local";
           $("live-panel").hidden = false;
+          $("people-panel").hidden = false;
+          $("streamer-view").classList.add("is-live"); // passe en 2 colonnes
+          renderPeople();
           setStatus("Envoie le lien à tes potes !");
           break;
         }
 
+        case "join-request":
+          // Bon mot de passe : quelqu'un attend notre accord (aucune connexion WebRTC pour l'instant)
+          if (autoAccept.checked) {
+            send({ type: "join-answer", viewerId: msg.viewerId, accept: true });
+          } else {
+            pendingRequests.set(msg.viewerId, msg.name);
+            renderPeople();
+          }
+          break;
+
+        case "join-request-cancelled":
+          // Il a fermé la page pendant l'attente
+          pendingRequests.delete(msg.viewerId);
+          renderPeople();
+          break;
+
         case "viewer-joined": {
-          // 3. Un spectateur arrive : on crée une connexion WebRTC dédiée et on lui fait une offre
+          // 3. Un spectateur arrive (accepté) : on crée une connexion WebRTC dédiée et on lui fait une offre
           const pc = new RTCPeerConnection(RTC_CONFIG);
           peerConnections.set(msg.viewerId, pc);
+          viewerNames.set(msg.viewerId, msg.name);
           updateCount();
+          renderPeople();
 
           pc.onicecandidate = (e) => {
             if (e.candidate) {
@@ -282,7 +342,10 @@ function startStreamerMode() {
           peerConnections.get(msg.viewerId)?.close();
           peerConnections.delete(msg.viewerId);
           viewerQualities.delete(msg.viewerId);
+          viewerNames.delete(msg.viewerId);
+          blindViewers.delete(msg.viewerId);
           updateCount();
+          renderPeople();
           break;
         }
 
@@ -322,18 +385,11 @@ function startStreamerMode() {
         const oldVideoTrack = videoTrack;
         stream = newStream;
         videoTrack = newStream.getVideoTracks()[0]!;
-        const newAudioTrack = newStream.getAudioTracks()[0] ?? null; // null = pas de son sur ce nouvel écran
 
         // replaceTrack() : on change ce qui est envoyé, sans renégocier. Le spectateur voit juste l'image changer.
+        // (En pause, ou pour un spectateur aveugle, updateSending n'envoie toujours rien.)
         for (const [viewerId, pc] of peerConnections) {
-          // En pause, on ne renvoie rien : le nouvel écran sera envoyé à la reprise
-          if (!paused) {
-            for (const transceiver of pc.getTransceivers()) {
-              // receiver.track existe toujours (même si sender.track est vide) : il donne le type d'emplacement
-              const kind = transceiver.receiver.track.kind;
-              await transceiver.sender.replaceTrack(kind === "video" ? videoTrack : newAudioTrack);
-            }
-          }
+          await updateSending(viewerId, pc);
           // La résolution du nouvel écran peut être différente : on recalcule la qualité de ce spectateur
           await applyViewerQuality(pc, viewerQualities.get(viewerId) ?? "max");
         }
@@ -396,12 +452,8 @@ function startStreamerMode() {
       pauseBtn.disabled = true;
       try {
         paused = !paused;
-        const audioTrack = stream.getAudioTracks()[0] ?? null;
         for (const [viewerId, pc] of peerConnections) {
-          for (const transceiver of pc.getTransceivers()) {
-            const kind = transceiver.receiver.track.kind;
-            await transceiver.sender.replaceTrack(paused ? null : kind === "video" ? videoTrack : audioTrack);
-          }
+          await updateSending(viewerId, pc); // un spectateur aveugle reste aveugle à la reprise
           // À la reprise, l'écran ou la qualité ont pu changer pendant la pause : on réapplique
           if (!paused) await applyViewerQuality(pc, viewerQualities.get(viewerId) ?? "max");
           send({ type: "signal", to: viewerId, data: { kind: "pause", paused } });
@@ -413,6 +465,87 @@ function startStreamerMode() {
       } finally {
         pauseBtn.disabled = false;
       }
+    });
+
+    // 8. Panneau de droite : salle d'attente (✅ / ❌) et spectateurs (👁️ / 🙈, 👢)
+    // Les pseudos sont tapés par les spectateurs : on les affiche avec textContent, JAMAIS innerHTML.
+    // Sinon un pseudo comme "<img src=x onerror=…>" exécuterait du code chez le streamer (faille XSS).
+    const answer = (viewerId: string, accept: boolean) => {
+      pendingRequests.delete(viewerId);
+      send({ type: "join-answer", viewerId, accept });
+      renderPeople();
+    };
+
+    const toggleBlind = async (viewerId: string) => {
+      const pc = peerConnections.get(viewerId);
+      if (!pc) return;
+      const blinded = !blindViewers.has(viewerId);
+      if (blinded) blindViewers.add(viewerId);
+      else blindViewers.delete(viewerId);
+      renderPeople();
+      await updateSending(viewerId, pc);
+      if (!blinded) await applyViewerQuality(pc, viewerQualities.get(viewerId) ?? "max");
+      send({ type: "signal", to: viewerId, data: { kind: "blind", blinded } });
+    };
+
+    /** Petit bouton avec un émoji, et un libellé lisible au survol et par les lecteurs d'écran. */
+    const iconButton = (emoji: string, label: string, onClick: () => void) => {
+      const btn = document.createElement("button");
+      btn.textContent = emoji;
+      btn.title = label;
+      btn.setAttribute("aria-label", label);
+      btn.addEventListener("click", onClick);
+      return btn;
+    };
+
+    /** Une ligne de liste : le pseudo, puis les boutons. */
+    const personRow = (name: string, buttons: HTMLButtonElement[]) => {
+      const li = document.createElement("li");
+      const nameEl = document.createElement("span");
+      nameEl.className = "name";
+      nameEl.textContent = name; // textContent : le pseudo est affiché comme du texte, jamais interprété
+      nameEl.title = name;
+      li.append(nameEl, ...buttons);
+      return li;
+    };
+
+    function renderPeople() {
+      const pendingList = $("pending-list");
+      pendingList.replaceChildren(
+        ...[...pendingRequests].map(([id, name]) =>
+          personRow(name, [
+            iconButton("✅", `Accepter ${name}`, () => answer(id, true)),
+            iconButton("❌", `Refuser ${name}`, () => answer(id, false)),
+          ]),
+        ),
+      );
+      const viewerList = $("viewer-list");
+      viewerList.replaceChildren(
+        ...[...viewerNames].map(([id, name]) => {
+          const blind = blindViewers.has(id);
+          const row = personRow(name, [
+            // L'émoji montre l'ÉTAT actuel : 👁️ il voit, 🙈 il est aveugle. Un clic inverse.
+            iconButton(blind ? "🙈" : "👁️", blind ? `Rendre la vue à ${name}` : `Rendre ${name} aveugle`, () =>
+              void toggleBlind(id),
+            ),
+            iconButton("👢", `Expulser ${name}`, () => send({ type: "kick", viewerId: id })),
+          ]);
+          row.classList.toggle("is-blind", blind);
+          return row;
+        }),
+      );
+      $("pending-count").textContent = String(pendingRequests.size);
+      $("watching-count").textContent = String(viewerNames.size);
+      // "Personne pour l'instant" sous une liste vide
+      for (const empty of document.querySelectorAll<HTMLElement>(".people-empty")) {
+        empty.hidden = $(empty.dataset.for!).childElementCount > 0;
+      }
+    }
+
+    // Accepter automatiquement : décochée par défaut. En la cochant, on accepte aussi ceux qui attendent déjà.
+    autoAccept.addEventListener("change", () => {
+      if (!autoAccept.checked) return;
+      for (const id of [...pendingRequests.keys()]) answer(id, true);
     });
   });
 
@@ -547,6 +680,26 @@ function startViewerMode(roomId: string) {
   const passwordInput = $<HTMLInputElement>("viewer-password");
   const passwordBtn = $<HTMLButtonElement>("password-btn");
   const passwordError = $("password-error");
+  // Pseudo : retenu par le navigateur (ce n'est pas une info secrète), pour ne pas le retaper à chaque stream
+  const nameInput = $<HTMLInputElement>("viewer-name");
+  nameInput.maxLength = MAX_NAME_LENGTH;
+  nameInput.value = loadPref("name") ?? "";
+
+  /** Formulaire hors service (bloqué, refusé, expulsé) : on le désactive entièrement. */
+  const lockForm = () => {
+    nameInput.disabled = true;
+    passwordInput.disabled = true;
+    passwordBtn.disabled = true;
+  };
+
+  // Bandeau par-dessus la vidéo : "aveugle" passe avant "pause" (c'est ce qui le concerne lui)
+  let paused = false;
+  let blinded = false;
+  const updateBanner = () => {
+    const banner = $("video-banner");
+    banner.hidden = !paused && !blinded;
+    banner.textContent = blinded ? "🙈 Le streamer a masqué l'image pour toi" : "⏸ Stream en pause";
+  };
 
   setStatus("Connexion au salon…");
 
@@ -556,7 +709,7 @@ function startViewerMode(roomId: string) {
         // Le salon existe : on demande le mot de passe (le streamer ne sait même pas qu'on est là)
         setStatus("");
         passwordForm.hidden = false;
-        passwordInput.focus();
+        (nameInput.value ? passwordInput : nameInput).focus();
         break;
 
       case "password-wrong":
@@ -567,18 +720,36 @@ function startViewerMode(roomId: string) {
         break;
 
       case "blocked": {
-        // Trop d'erreurs depuis cette adresse IP : le serveur coupe la connexion
+        // Bloqué pour cette adresse IP (trop d'erreurs, ou refusé récemment) : le serveur coupe la connexion
         const minutes = Math.ceil(msg.retryAfterSeconds / 60);
+        const why = msg.reason === "refused" ? "Le streamer a refusé ta demande." : "Trop d'essais.";
         passwordForm.hidden = false;
-        passwordError.textContent = `Trop d'essais. Réessaie dans ${minutes} minute(s), en rechargeant la page.`;
-        passwordInput.disabled = true;
-        passwordBtn.disabled = true;
+        passwordError.textContent = `${why} Réessaie dans ${minutes} minute(s), en rechargeant la page.`;
+        lockForm();
         setStatus("");
         break;
       }
 
+      case "waiting-approval":
+        // Bon mot de passe : on attend que le streamer clique sur Accepter
+        passwordForm.hidden = true;
+        setStatus("⏳ En attente de l'accord du streamer…");
+        break;
+
+      case "join-refused":
+        lockForm();
+        setStatus("Le streamer a refusé ta demande.", true);
+        break;
+
+      case "kicked":
+        pc?.close();
+        video.srcObject = null;
+        $("player").hidden = true;
+        setStatus("👢 Tu as été expulsé du stream.", true);
+        break;
+
       case "joined":
-        // Bon mot de passe : on cache le formulaire et on affiche le lecteur
+        // Accepté par le streamer : on cache le formulaire et on affiche le lecteur
         passwordForm.hidden = true;
         $("player").hidden = false;
         setStatus("En attente du flux vidéo…");
@@ -613,8 +784,13 @@ function startViewerMode(roomId: string) {
           startStats(pc);
         } else if (msg.data.kind === "pause") {
           // La connexion reste ouverte : la dernière image reste figée, on affiche juste le bandeau
-          $("pause-banner").hidden = !msg.data.paused;
-          if (msg.data.paused) setStatus("");
+          paused = msg.data.paused;
+          updateBanner();
+          if (paused) setStatus("");
+        } else if (msg.data.kind === "blind") {
+          // Le streamer ne nous envoie plus ni image ni son (à nous seulement)
+          blinded = msg.data.blinded;
+          updateBanner();
         } else if (pc) {
           await applySignal(pc, msg.data);
         }
@@ -629,6 +805,7 @@ function startViewerMode(roomId: string) {
 
       case "error":
         setStatus(msg.message, true);
+        passwordBtn.disabled = false; // ex. "Choisis un pseudo" : on peut corriger et réessayer
         break;
     }
   });
@@ -638,10 +815,18 @@ function startViewerMode(roomId: string) {
 
   passwordForm.addEventListener("submit", (e) => {
     e.preventDefault(); // sinon le navigateur rechargerait la page en envoyant le formulaire
+    const name = nameInput.value.trim();
+    if (name.length === 0) {
+      passwordError.textContent = "Choisis un pseudo : c'est lui que le streamer verra.";
+      nameInput.focus();
+      return;
+    }
     if (passwordInput.value.length === 0) return;
+    savePref("name", name);
     passwordBtn.disabled = true; // un seul essai à la fois
     passwordError.textContent = "";
-    send({ type: "join-room", roomId, password: passwordInput.value });
+    setStatus("");
+    send({ type: "join-room", roomId, password: passwordInput.value, name });
   });
 
   // Les navigateurs bloquent la lecture automatique AVEC son : on démarre muet,

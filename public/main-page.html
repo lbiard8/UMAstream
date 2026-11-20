@@ -30,7 +30,9 @@
 
   <main>
     <!-- Vue "streamer" : affichée quand il n'y a pas de ?room= dans l'URL -->
-    <section id="streamer-view" hidden>
+    <section id="streamer-view" class="streamer-layout" hidden>
+      <!-- Colonne de gauche : réglages, panneau "En direct", aperçu -->
+      <div class="streamer-main">
       <div class="card">
         <label for="resolution">Résolution</label>
         <select id="resolution">
@@ -70,12 +72,29 @@
       </div>
 
       <video id="preview" autoplay muted playsinline hidden></video>
+      </div>
+
+      <!-- Colonne de droite : gestion des spectateurs (affichée une fois le stream lancé).
+           Les listes sont remplies par main.ts. -->
+      <aside id="people-panel" class="people-panel card" hidden>
+        <h2>⏳ En attente (<span id="pending-count">0</span>)</h2>
+        <ul id="pending-list" class="people"></ul>
+        <p class="people-empty" data-for="pending-list">Personne pour l'instant</p>
+
+        <h2>👥 Spectateurs (<span id="watching-count">0</span>)</h2>
+        <ul id="viewer-list" class="people"></ul>
+        <p class="people-empty" data-for="viewer-list">Personne pour l'instant</p>
+
+        <label class="check"><input type="checkbox" id="auto-accept" /> Accepter automatiquement</label>
+      </aside>
     </section>
 
     <!-- Vue "spectateur" : affichée quand l'URL contient ?room=... -->
     <section id="viewer-view" hidden>
       <!-- Formulaire du mot de passe : affiché tant que le spectateur n'est pas entré dans le salon -->
       <form id="password-form" class="card" hidden>
+        <label for="viewer-name">Pseudo</label>
+        <input id="viewer-name" autocomplete="nickname" required />
         <label for="viewer-password">Mot de passe du stream</label>
         <input id="viewer-password" type="password" maxlength="128" autocomplete="off" required />
         <button id="password-btn" type="submit" class="primary">Rejoindre</button>
@@ -89,8 +108,8 @@
         <div id="video-wrap" class="video-wrap">
           <video id="remote" autoplay muted playsinline></video>
           <span id="stats" class="stats" hidden></span>
-          <!-- Bandeau affiché par-dessus la dernière image quand le streamer met en pause -->
-          <div id="pause-banner" class="pause-banner" hidden>⏸ Stream en pause</div>
+          <!-- Bandeau par-dessus la dernière image : pause du stream, ou spectateur rendu aveugle -->
+          <div id="video-banner" class="video-banner" hidden>⏸ Stream en pause</div>
         </div>
         <div class="controls">
           <button id="unmute-btn">🔊 Activer le son</button>

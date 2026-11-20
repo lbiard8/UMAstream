@@ -93,3 +93,30 @@ export class AttemptLimiter {
     this.byIp.delete(ip);
   }
 }
+
+// ---------------------------------------------------------------------------
+// 3. Délai après un refus du streamer
+// ---------------------------------------------------------------------------
+// Un spectateur refusé ne doit pas pouvoir redemander en boucle (en rechargeant la page)
+// pour harceler le streamer : son IP doit attendre avant de refaire une demande.
+
+export class IpCooldown {
+  private until = new Map<string, number>();
+
+  constructor(private readonly durationMs: number) {}
+
+  start(ip: string) {
+    this.until.set(ip, Date.now() + this.durationMs);
+  }
+
+  /** Secondes restantes avant que cette IP puisse redemander (0 = elle peut). */
+  remainingSeconds(ip: string): number {
+    const end = this.until.get(ip);
+    if (end === undefined) return 0;
+    if (end <= Date.now()) {
+      this.until.delete(ip);
+      return 0;
+    }
+    return Math.ceil((end - Date.now()) / 1000);
+  }
+}

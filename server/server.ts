@@ -8,11 +8,20 @@ import { extname, join, normalize, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
-import type { ClientMessage, ServerMessage, ShareReach } from "../shared/messages.js";
+import { MAX_NAME_LENGTH, type ClientMessage, type ServerMessage, type ShareReach } from "../shared/messages.js";
 import { getLanIp, startTunnel } from "./network.js";
+import {
+  ConnectionCounter,
+  MAX_CONNECTIONS_PER_IP,
+  MAX_CONNECTIONS_TOTAL,
+  MAX_JOIN_REQUESTS_PER_MINUTE,
+  MAX_PENDING_PER_ROOM,
+  RateLimiter,
+} from "./limits.js";
 import {
   AttemptLimiter,
   hashPassword,
+  IpCooldown,
   MAX_PASSWORD_LENGTH,
   verifyPassword,
   type PasswordHash,
@@ -74,6 +83,8 @@ const httpServer = createServer(async (req, res) => {
 interface Room {
   streamer: WebSocket;
   viewers: Map<string, WebSocket>; // viewerId -> connexion
+  // Salle d'attente : bon mot de passe, mais pas encore accepté par le streamer
+  pending: Map<string, { ws: WebSocket; name: string }>;
   password: PasswordHash; // empreinte du mot de passe, jamais le mot de passe en clair
 }
 
@@ -87,10 +98,25 @@ interface PeerInfo {
 const rooms = new Map<string, Room>();
 const peers = new Map<WebSocket, PeerInfo>();
 const ipOf = new WeakMap<WebSocket, string>(); // adresse IP de chaque connexion
+// Connexions ouvertes depuis ce PC : les SEULES autorisées à créer un salon (à streamer)
+const localConnections = new WeakSet<WebSocket>();
+const connectionsByIp = new ConnectionCounter();
+const joinRateLimiter = new RateLimiter(MAX_JOIN_REQUESTS_PER_MINUTE, 60_000);
 // Connexions dont une demande (création ou mot de passe) est en cours de traitement :
 // on ignore leurs autres demandes, pour qu'on ne puisse pas tester 50 mots de passe en parallèle.
 const busy = new WeakSet<WebSocket>();
 const limiter = new AttemptLimiter();
+// Après un refus du streamer, cette IP doit attendre 5 minutes avant de redemander
+const refusedCooldown = new IpCooldown(5 * 60_000);
+// Connexions en salle d'attente : dans quel salon, et sous quel id
+const pendingOf = new Map<WebSocket, { roomId: string; viewerId: string }>();
+
+/** Pseudo nettoyé : sans espaces autour, sans caractères invisibles, 20 caractères max. */
+function cleanName(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  // eslint-disable-next-line no-control-regex
+  return raw.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME_LENGTH);
+}
 
 const newId = () => randomBytes(4).toString("hex"); // ex : "9f3a1c07"
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -104,20 +130,64 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 function clientIp(req: IncomingMessage): string {
   const socketIp = req.socket.remoteAddress ?? "inconnue";
-  const fromThisPc = socketIp === "127.0.0.1" || socketIp === "::1" || socketIp === "::ffff:127.0.0.1";
   const cloudflareIp = req.headers["cf-connecting-ip"];
-  if (fromThisPc && typeof cloudflareIp === "string" && cloudflareIp) return cloudflareIp;
+  if (isLoopback(socketIp) && typeof cloudflareIp === "string" && cloudflareIp) return cloudflareIp;
   return socketIp;
+}
+
+function isLoopback(ip: string | undefined): boolean {
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
+
+/**
+ * La connexion vient-elle vraiment de CE PC (page ouverte sur http://localhost) ?
+ * - via le tunnel : la connexion arrive aussi de 127.0.0.1 (c'est cloudflared), MAIS avec l'en-tête
+ *   "cf-connecting-ip" que Cloudflare ajoute toujours -> ce n'est pas ce PC ;
+ * - depuis le réseau local : l'adresse n'est pas 127.0.0.1 -> ce n'est pas ce PC.
+ */
+function isFromThisPc(req: IncomingMessage): boolean {
+  return isLoopback(req.socket.remoteAddress) && req.headers["cf-connecting-ip"] === undefined;
 }
 
 function send(ws: WebSocket, msg: ServerMessage) {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
 
-const wss = new WebSocketServer({ server: httpServer });
+// maxPayload : taille max d'un message. Par défaut, la bibliothèque ws accepte jusqu'à 100 Mo,
+// ce qui permettrait à n'importe qui de remplir la mémoire de ce PC avec quelques messages énormes.
+// Nos plus gros messages (les offres WebRTC) font moins de 10 Ko : 64 Ko laisse une large marge.
+// Au-delà, ws ferme la connexion tout seul (code 1009 "message trop gros").
+const MAX_MESSAGE_BYTES = 64 * 1024;
+const wss = new WebSocketServer({ server: httpServer, maxPayload: MAX_MESSAGE_BYTES });
 
 wss.on("connection", (ws, req) => {
-  ipOf.set(ws, clientIp(req));
+  const ip = clientIp(req);
+  ipOf.set(ws, ip);
+
+  // INDISPENSABLE, et EN PREMIER : en Node, une erreur sans écouteur fait planter TOUT le serveur.
+  // Sans ces lignes, un seul message mal formé (ou trop gros) envoyé par n'importe qui
+  // couperait le stream pour tout le monde. Ici, seule la connexion fautive est fermée
+  // (ws la ferme tout seul) et le serveur continue. Placé avant les refus ci-dessous,
+  // pour protéger aussi les connexions refusées.
+  ws.on("error", (err) => {
+    console.warn(`Connexion fermée sur erreur (${ip}) : ${err.message}`);
+  });
+
+  // Plafonds de connexions : au-delà, on explique pourquoi et on ferme (code 1008 = "règle non respectée")
+  const refuse = (message: string) => {
+    console.warn(`Connexion refusée (${ip}) : ${message}`);
+    send(ws, { type: "error", message });
+    ws.close(1008, "Trop de connexions");
+  };
+  // wss.clients contient déjà cette nouvelle connexion, d'où le ">"
+  if (wss.clients.size > MAX_CONNECTIONS_TOTAL) return refuse("Serveur plein, réessaie plus tard.");
+  if (connectionsByIp.count(ip) >= MAX_CONNECTIONS_PER_IP) {
+    return refuse("Trop de connexions depuis ton adresse : ferme quelques onglets UMAstream.");
+  }
+  connectionsByIp.add(ip);
+  ws.once("close", () => connectionsByIp.remove(ip)); // compté une fois, décompté une fois
+
+  if (isFromThisPc(req)) localConnections.add(ws);
 
   ws.on("message", (raw) => {
     let msg: ClientMessage;
@@ -139,6 +209,15 @@ async function handleMessage(ws: WebSocket, msg: ClientMessage) {
     case "create-room": {
       if (me) return send(ws, { type: "error", message: "Déjà dans un salon" });
       if (busy.has(ws)) return;
+      // Seul le propriétaire de ce PC peut streamer : un inconnu qui a trouvé l'adresse du tunnel
+      // ne peut pas créer de salons ici (ni faire calculer des hachages en boucle à ce PC).
+      if (!localConnections.has(ws)) {
+        console.warn(`Création de salon refusée : demande venue de l'extérieur (${ipOf.get(ws) ?? "?"})`);
+        return send(ws, {
+          type: "error",
+          message: `Pour streamer, ouvre http://localhost:${PORT} sur le PC qui fait tourner UMAstream.`,
+        });
+      }
       // On ne fait jamais confiance au client : on revérifie ici ce que la page a déjà vérifié
       if (typeof msg.password !== "string" || msg.password.length === 0) {
         return send(ws, { type: "error", message: "Un mot de passe est obligatoire" });
@@ -151,7 +230,7 @@ async function handleMessage(ws: WebSocket, msg: ClientMessage) {
         const password = await hashPassword(msg.password);
         if (ws.readyState !== WebSocket.OPEN) return; // le streamer est parti pendant le hachage
         const roomId = newId();
-        rooms.set(roomId, { streamer: ws, viewers: new Map(), password });
+        rooms.set(roomId, { streamer: ws, viewers: new Map(), pending: new Map(), password });
         peers.set(ws, { id: "streamer", roomId, role: "streamer" });
         send(ws, { type: "room-created", roomId, ...shareInfo() });
         console.log(`[salon ${roomId}] créé`);
@@ -163,14 +242,24 @@ async function handleMessage(ws: WebSocket, msg: ClientMessage) {
 
     case "join-room": {
       if (me) return send(ws, { type: "error", message: "Déjà dans un salon" });
-      if (busy.has(ws)) return; // un essai est déjà en cours pour cette connexion
+      if (busy.has(ws) || pendingOf.has(ws)) return; // essai en cours, ou déjà en salle d'attente
+      const ip = ipOf.get(ws) ?? "inconnue";
+      // Compté AVANT de dire si le salon existe : on ne peut pas tester des numéros de salon en boucle
+      if (!joinRateLimiter.tryConsume(ip)) {
+        return send(ws, { type: "error", message: "Trop de tentatives, attends une minute." });
+      }
       const room = rooms.get(msg.roomId);
       if (!room) return send(ws, { type: "error", message: "Ce salon n'existe pas (ou le stream est terminé)" });
 
-      const ip = ipOf.get(ws) ?? "inconnue";
       const blockedFor = limiter.blockedFor(ip);
       if (blockedFor > 0) {
-        send(ws, { type: "blocked", retryAfterSeconds: blockedFor });
+        send(ws, { type: "blocked", reason: "attempts", retryAfterSeconds: blockedFor });
+        ws.close();
+        return;
+      }
+      const refusedFor = refusedCooldown.remainingSeconds(ip);
+      if (refusedFor > 0) {
+        send(ws, { type: "blocked", reason: "refused", retryAfterSeconds: refusedFor });
         ws.close();
         return;
       }
@@ -178,6 +267,9 @@ async function handleMessage(ws: WebSocket, msg: ClientMessage) {
       if (typeof msg.password !== "string" || msg.password.length === 0) {
         return send(ws, { type: "password-required" });
       }
+      // Pseudo vérifié AVANT le mot de passe : un pseudo oublié ne doit pas coûter un essai
+      const name = cleanName(msg.name);
+      if (name.length === 0) return send(ws, { type: "error", message: "Choisis un pseudo" });
 
       busy.add(ws);
       try {
@@ -189,7 +281,7 @@ async function handleMessage(ws: WebSocket, msg: ClientMessage) {
           const attemptsLeft = limiter.fail(ip);
           console.log(`[salon ${msg.roomId}] mot de passe faux depuis ${ip} (${attemptsLeft} essai(s) restant(s))`);
           if (attemptsLeft === 0) {
-            send(ws, { type: "blocked", retryAfterSeconds: limiter.blockedFor(ip) });
+            send(ws, { type: "blocked", reason: "attempts", retryAfterSeconds: limiter.blockedFor(ip) });
             ws.close();
           } else {
             send(ws, { type: "password-wrong", attemptsLeft });
@@ -201,17 +293,59 @@ async function handleMessage(ws: WebSocket, msg: ClientMessage) {
         // Le salon a pu fermer pendant la vérification
         const current = rooms.get(msg.roomId);
         if (!current) return send(ws, { type: "error", message: "Le stream vient de se terminer" });
+        if (current.pending.size >= MAX_PENDING_PER_ROOM) {
+          return send(ws, { type: "error", message: "Trop de demandes en attente, réessaie dans un moment." });
+        }
 
+        // Bon mot de passe : direction la salle d'attente. Le streamer décide (Accepter / Refuser).
+        // Aucune connexion WebRTC tant qu'il n'a pas accepté : aucune IP échangée.
         const viewerId = newId();
-        current.viewers.set(viewerId, ws);
-        peers.set(ws, { id: viewerId, roomId: msg.roomId, role: "viewer" });
-        send(ws, { type: "joined", roomId: msg.roomId });
-        // C'est SEULEMENT maintenant que le streamer est prévenu et lance la connexion WebRTC
-        send(current.streamer, { type: "viewer-joined", viewerId });
-        console.log(`[salon ${msg.roomId}] spectateur ${viewerId} arrivé (${current.viewers.size} au total)`);
+        current.pending.set(viewerId, { ws, name });
+        pendingOf.set(ws, { roomId: msg.roomId, viewerId });
+        send(ws, { type: "waiting-approval" });
+        send(current.streamer, { type: "join-request", viewerId, name });
+        console.log(`[salon ${msg.roomId}] ${name} (${viewerId}) attend l'accord du streamer`);
       } finally {
         busy.delete(ws);
       }
+      break;
+    }
+
+    case "join-answer": {
+      // Seul le streamer du salon peut répondre, et seulement à une demande de SON salon
+      if (me?.role !== "streamer") return;
+      const room = rooms.get(me.roomId);
+      const request = room?.pending.get(msg.viewerId);
+      if (!room || !request) return; // demande annulée entre-temps (le spectateur est parti)
+      room.pending.delete(msg.viewerId);
+      pendingOf.delete(request.ws);
+
+      if (!msg.accept) {
+        const ip = ipOf.get(request.ws) ?? "inconnue";
+        refusedCooldown.start(ip); // 5 min avant de pouvoir redemander
+        send(request.ws, { type: "join-refused" });
+        request.ws.close();
+        console.log(`[salon ${me.roomId}] ${request.name} refusé`);
+        return;
+      }
+
+      room.viewers.set(msg.viewerId, request.ws);
+      peers.set(request.ws, { id: msg.viewerId, roomId: me.roomId, role: "viewer" });
+      send(request.ws, { type: "joined", roomId: me.roomId });
+      // C'est SEULEMENT maintenant que le streamer lance la connexion WebRTC
+      send(ws, { type: "viewer-joined", viewerId: msg.viewerId, name: request.name });
+      console.log(`[salon ${me.roomId}] ${request.name} accepté (${room.viewers.size} spectateur(s))`);
+      break;
+    }
+
+    case "kick": {
+      if (me?.role !== "streamer") return;
+      const viewer = rooms.get(me.roomId)?.viewers.get(msg.viewerId);
+      if (!viewer) return;
+      send(viewer, { type: "kicked" });
+      // La fermeture déclenche handleDisconnect, qui prévient le streamer (viewer-left)
+      viewer.close();
+      console.log(`[salon ${me.roomId}] spectateur ${msg.viewerId} expulsé`);
       break;
     }
 
@@ -228,6 +362,17 @@ async function handleMessage(ws: WebSocket, msg: ClientMessage) {
 }
 
 function handleDisconnect(ws: WebSocket) {
+  // Spectateur parti pendant qu'il était en salle d'attente : on retire sa demande chez le streamer
+  const waiting = pendingOf.get(ws);
+  if (waiting) {
+    pendingOf.delete(ws);
+    const room = rooms.get(waiting.roomId);
+    if (room?.pending.delete(waiting.viewerId)) {
+      send(room.streamer, { type: "join-request-cancelled", viewerId: waiting.viewerId });
+    }
+    return;
+  }
+
   const me = peers.get(ws);
   if (!me) return;
   peers.delete(ws);
@@ -239,6 +384,10 @@ function handleDisconnect(ws: WebSocket) {
     for (const viewer of room.viewers.values()) {
       send(viewer, { type: "stream-ended" });
       peers.delete(viewer);
+    }
+    for (const { ws: waitingWs } of room.pending.values()) {
+      send(waitingWs, { type: "stream-ended" });
+      pendingOf.delete(waitingWs);
     }
     rooms.delete(me.roomId);
     console.log(`[salon ${me.roomId}] fermé`);

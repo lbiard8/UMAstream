@@ -5,6 +5,9 @@
 /** Qualité demandée par un spectateur. "max" = celle choisie par le streamer. */
 export type ViewerQuality = "max" | "1080p" | "720p" | "480p" | "360p";
 
+/** Longueur max d'un pseudo de spectateur. */
+export const MAX_NAME_LENGTH = 20;
+
 /** Données échangées entre streamer et spectateur, que le serveur fait suivre sans les lire. */
 export type SignalData =
   | { kind: "offer" | "answer"; sdp: string }
@@ -12,7 +15,9 @@ export type SignalData =
   // Spectateur -> streamer : "envoie-moi cette qualité" (ne concerne que SA connexion)
   | { kind: "quality"; preset: ViewerQuality }
   // Streamer -> spectateur : le stream est en pause (ou reprend). La connexion, elle, reste ouverte.
-  | { kind: "pause"; paused: boolean };
+  | { kind: "pause"; paused: boolean }
+  // Streamer -> UN spectateur : il ne reçoit plus ni image ni son (ou les retrouve)
+  | { kind: "blind"; blinded: boolean };
 
 /** Qui pourra ouvrir le lien : n'importe qui, le réseau local seulement, ou ce PC seulement. */
 export type ShareReach = "internet" | "lan" | "local";
@@ -21,22 +26,40 @@ export type ShareReach = "internet" | "lan" | "local";
 export type ClientMessage =
   // Le mot de passe est obligatoire pour créer un salon
   | { type: "create-room"; password: string }
-  // Sans mot de passe, le serveur répond "password-required" (premier contact du spectateur)
-  | { type: "join-room"; roomId: string; password?: string }
+  // Sans mot de passe, le serveur répond "password-required" (premier contact du spectateur).
+  // Avec le mot de passe, le pseudo est obligatoire : c'est lui que le streamer verra.
+  | { type: "join-room"; roomId: string; password?: string; name?: string }
+  // Streamer -> serveur : réponse à une demande d'entrée (viewerId = celui de la demande)
+  | { type: "join-answer"; viewerId: string; accept: boolean }
+  // Streamer -> serveur : expulser un spectateur
+  | { type: "kick"; viewerId: string }
   // `to` = id du spectateur (si on est le streamer) ou "streamer" (si on est spectateur)
   | { type: "signal"; to: string; data: SignalData };
+
+/**
+ * Pourquoi un spectateur est bloqué :
+ *  - "attempts" : 5 mauvais mots de passe
+ *  - "refused"  : le streamer a refusé sa demande récemment
+ */
+export type BlockReason = "attempts" | "refused";
 
 /** Messages envoyés par le serveur à un navigateur. */
 export type ServerMessage =
   // shareBase = début du lien à partager (tunnel internet, ou IP locale) ; absent = on garde l'adresse actuelle
   | { type: "room-created"; roomId: string; shareBase?: string; reach: ShareReach }
   | { type: "joined"; roomId: string }
-  // Réponses à un spectateur qui veut entrer. Tant qu'il n'a pas le bon mot de passe,
-  // le streamer n'est PAS prévenu : aucune connexion WebRTC, donc aucune IP échangée.
+  // Réponses à un spectateur qui veut entrer. Tant qu'il n'est pas accepté,
+  // aucune connexion WebRTC n'est lancée : aucune IP n'est échangée.
   | { type: "password-required" }
   | { type: "password-wrong"; attemptsLeft: number }
-  | { type: "blocked"; retryAfterSeconds: number }
-  | { type: "viewer-joined"; viewerId: string }
+  | { type: "blocked"; reason: BlockReason; retryAfterSeconds: number }
+  | { type: "waiting-approval" } // bon mot de passe, on attend l'accord du streamer
+  | { type: "join-refused" }
+  | { type: "kicked" }
+  // Serveur -> streamer : gestion des spectateurs
+  | { type: "join-request"; viewerId: string; name: string }
+  | { type: "join-request-cancelled"; viewerId: string } // il a fermé la page pendant l'attente
+  | { type: "viewer-joined"; viewerId: string; name: string }
   | { type: "viewer-left"; viewerId: string }
   | { type: "signal"; from: string; data: SignalData }
   | { type: "stream-ended" }

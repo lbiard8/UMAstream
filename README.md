@@ -62,6 +62,57 @@ Le streamer choisit un **mot de passe obligatoire** avant de partager. Les spect
 
 > Deux personnes derrière la même box partagent la même IP : si l'une se trompe 5 fois, l'autre est bloquée aussi.
 
+## Gérer les spectateurs
+
+Le spectateur tape un **pseudo** et le mot de passe. S'il est bon, il arrive en **salle d'attente** : le streamer
+voit sa demande dans le panneau de droite (sous le reste sur petit écran) et décide.
+
+| Liste | Bouton | Effet |
+|---|---|---|
+| ⏳ En attente | ✅ | Accepter : la connexion WebRTC démarre, il reçoit le stream |
+| ⏳ En attente | ❌ | Refuser : son IP ne peut plus redemander pendant 5 minutes |
+| 👥 Spectateurs | 👁️ / 🙈 | L'émoji montre son état (il voit / il est aveugle). Un clic inverse : aveugle = plus ni image ni son pour lui seul, avec un bandeau « 🙈 Le streamer a masqué l'image pour toi » |
+| 👥 Spectateurs | 👢 | Expulser : il est déconnecté. Il peut refaire une demande tout de suite |
+
+- **Accepter automatiquement** (décochée par défaut) : toute personne qui a le bon mot de passe entre directement.
+  La cocher accepte aussi ceux qui attendent déjà.
+- Tant qu'un spectateur n'est pas accepté, **aucune connexion WebRTC n'existe** : ni son IP ni la tienne ne sont échangées.
+- Une demande sans réponse attend indéfiniment, et disparaît si le spectateur ferme la page.
+- **Le pseudo n'est pas vérifié** : n'importe qui peut taper celui d'un pote. En cas de doute, demande-lui en vocal.
+- Les pseudos sont affichés avec `textContent`, jamais `innerHTML` : un pseudo comme `<b>gras</b>` s'affiche tel
+  quel, sans pouvoir injecter de code chez le streamer.
+- Seul le streamer du salon peut accepter, refuser ou expulser : le serveur le vérifie à chaque demande.
+
+## Sécurité
+
+Chacun fait tourner UMAstream sur son PC. Le serveur est exposé à internet (via le tunnel) ou au réseau local :
+il est donc conçu pour qu'un inconnu qui a l'adresse ne puisse rien en tirer.
+
+- **Seul ce PC peut streamer** : créer un salon n'est autorisé que depuis `http://localhost`. Via le tunnel ou
+  l'IP locale, la page sert seulement à regarder. Un inconnu ne peut donc pas créer de salons sur ton PC.
+- **Messages limités à 64 Ko** (au lieu de 100 Mo par défaut) : impossible de remplir la mémoire du PC.
+- **Une connexion en erreur ne fait jamais planter le serveur** : seule la connexion fautive est fermée.
+- **Plafonds anti-abus** (`server/limits.ts`) :
+
+| Limite | Valeur |
+|---|---|
+| Connexions ouvertes par IP | 10 |
+| Connexions ouvertes au total | 100 |
+| Demandes « rejoindre » par IP | 20 par minute |
+| Demandes en attente par salon | 20 |
+
+- Le serveur ne sert que le dossier `public/` : aucun accès aux autres fichiers du PC.
+- Le tunnel ne redirige que vers le port d'UMAstream : les autres programmes du PC ne sont pas joignables.
+
+**Ce qui reste à savoir :**
+- En mode réseau local (`npm run dev`), tout circule **en clair** (`http://`, `ws://`) : sur un Wi-Fi public ou
+  d'université, quelqu'un sur le même réseau pourrait lire le mot de passe. Préfère `npm run share` (HTTPS).
+- Avec le tunnel, le chiffrement s'arrête chez Cloudflare, qui pourrait techniquement lire la signalisation
+  (dont le mot de passe). La vidéo, elle, ne passe jamais par Cloudflare.
+- Le plus grand risque reste **ce que tu montres à l'écran** (notifications, mots de passe, e-mails) : partage une
+  fenêtre plutôt que l'écran entier, active « Ne pas déranger », et utilise ⏸ Pause.
+- Coupe le serveur (`Ctrl + C`) quand tu ne streames pas : le tunnel disparaît avec lui.
+
 ## Qualité côté streamer
 
 Avant de partager, le streamer choisit une **résolution** (Native, 1080p, 720p, 480p, 360p) et un nombre
@@ -135,7 +186,8 @@ Chaque spectateur choisit sa qualité dans **⚙️ Options** : **Max** (celle d
 shared/messages.ts   Types des messages WebSocket (partagés client/serveur)
 server/server.ts     Serveur HTTP (fichiers du site) + signalisation WebSocket
 server/network.ts    Adresses joignables par les autres PC : IP locale et tunnel Cloudflare
-server/password.ts   Mot de passe des salons : hachage scrypt, vérification, limite d'essais par IP
+server/password.ts   Accès aux salons : hachage scrypt, limite d'essais par IP, délai après un refus
+server/limits.ts     Plafonds anti-abus : connexions par IP et au total, demandes par minute
 client/main.ts       Code navigateur : mode streamer et mode spectateur
 public/              main-page.html (servie sur "/"), style.css, app.js (généré)
 ```
@@ -143,7 +195,8 @@ public/              main-page.html (servie sur "/"), style.css, app.js (génér
 ## Comment ça marche
 
 1. Le streamer capture son écran (`getDisplayMedia`) et demande un salon au serveur, avec un mot de passe.
-2. Un spectateur ouvre le lien `?room=…` et tape le mot de passe ; s'il est bon, le serveur prévient le streamer.
+2. Un spectateur ouvre le lien `?room=…`, tape son pseudo et le mot de passe ; s'il est bon, le streamer
+   reçoit sa demande et l'accepte (ou la refuse).
 3. Les deux navigateurs s'échangent offre, réponse et candidats ICE **via le serveur**.
 4. Ensuite la vidéo passe **en direct** entre les navigateurs (pair à pair). Le serveur ne voit jamais la vidéo.
 
