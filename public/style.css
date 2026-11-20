@@ -65,6 +65,14 @@ button.danger { background: transparent; border-color: var(--danger); color: var
 .privacy { margin: 0; width: 100%; font-size: 0.9rem; color: #f5a524; }
 
 .live { margin: 0; font-weight: 600; width: 100%; }
+
+/* Diagnostic côté streamer : petit texte à chasse fixe, une ligne par info */
+.streamer-stats {
+  width: 100%; margin: 0;
+  font-family: ui-monospace, Consolas, monospace; font-size: 0.8rem;
+  color: var(--muted); white-space: pre-wrap; line-height: 1.5;
+}
+.streamer-stats:empty { display: none; }
 .dot {
   display: inline-block; width: 10px; height: 10px; border-radius: 50%;
   background: var(--live); margin-right: 4px; animation: pulse 1.5s infinite;

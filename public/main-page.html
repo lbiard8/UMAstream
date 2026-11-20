@@ -51,6 +51,8 @@
 
       <div id="live-panel" class="card" hidden>
         <p class="live"><span class="dot"></span> En direct · <span id="viewer-count">0</span> spectateur(s)</p>
+        <!-- Diagnostic de l'encodage (rempli chaque seconde par main.ts) -->
+        <div id="streamer-stats" class="streamer-stats"></div>
         <div class="share">
           <input id="share-link" readonly />
           <button id="copy-btn">Copier le lien</button>
@@ -59,6 +61,7 @@
         <p id="privacy-note" class="privacy" hidden>
           🔒 Ne partage ce lien qu'avec des personnes de confiance : elles pourront voir ton adresse IP.
         </p>
+        <button id="switch-btn">🔄 Changer d'écran</button>
         <button id="stop-btn" class="danger">Arrêter le partage</button>
       </div>
 
