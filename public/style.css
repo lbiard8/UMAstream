@@ -11,6 +11,10 @@
 
 * { box-sizing: border-box; }
 
+/* Sans cette règle, un élément avec à la fois `hidden` et un `display: flex/block` dans le CSS
+   resterait visible : le CSS de la page l'emporte sur le style par défaut du navigateur. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -72,7 +76,36 @@ video { width: 100%; border-radius: 12px; background: #000; display: block; }
 
 .player video { aspect-ratio: 16 / 9; object-fit: contain; }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
-.stats { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; }
+
+/* Stats en petit, par-dessus la vidéo, en haut à droite */
+.video-wrap { position: relative; }
+.stats {
+  position: absolute; top: 8px; right: 8px;
+  padding: 2px 6px; border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6); color: #fff;
+  font-size: 0.75rem; font-variant-numeric: tabular-nums;
+  pointer-events: none; /* ne gêne pas les clics sur la vidéo */
+}
+
+/* En plein écran : la vidéo occupe tout l'écran, sans coins arrondis */
+.video-wrap:fullscreen { background: #000; }
+.video-wrap:fullscreen video { height: 100%; aspect-ratio: auto; border-radius: 0; }
+
+/* Bouton ⚙️ en haut à droite de la page, et son panneau qui s'ouvre en dessous, aligné à droite.
+   Le header sert de repère (position: relative) pour placer le bouton dans son coin. */
+header { position: relative; }
+.options { position: absolute; top: 16px; right: 16px; text-align: left; }
+/* Sur téléphone, le titre centré passerait sous le bouton : on le descend un peu */
+@media (max-width: 600px) {
+  header:has(.options:not([hidden])) { padding-top: 68px; }
+}
+.options-panel {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 10;
+  display: flex; flex-direction: column; gap: 8px;
+  width: 230px; max-width: calc(100vw - 32px); /* ne déborde pas de l'écran sur téléphone */
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px;
+}
+.check { display: flex; align-items: center; gap: 8px; color: var(--text); cursor: pointer; }
 
 .status { color: var(--muted); text-align: center; }
 .status.error { color: var(--danger); }

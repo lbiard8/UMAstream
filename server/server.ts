@@ -28,7 +28,7 @@ function shareInfo(): { shareBase?: string; reach: ShareReach } {
 const PUBLIC_DIR = fileURLToPath(new URL("../public/", import.meta.url));
 
 // ---------------------------------------------------------------------------
-// 1. Fichiers statiques (index.html, app.js, style.css)
+// 1. Fichiers statiques (main-page.html, app.js, style.css)
 // ---------------------------------------------------------------------------
 
 const MIME: Record<string, string> = {
@@ -41,7 +41,8 @@ const MIME: Record<string, string> = {
 
 const httpServer = createServer(async (req, res) => {
   const urlPath = new URL(req.url ?? "/", "http://localhost").pathname;
-  const relative = urlPath === "/" ? "index.html" : urlPath.slice(1);
+  // "/" (accueil, et tous les liens de stream "/?room=…") -> la page principale
+  const relative = urlPath === "/" ? "main-page.html" : urlPath.slice(1);
   const filePath = normalize(join(PUBLIC_DIR, relative));
 
   // Empêche de sortir du dossier public avec des "../"

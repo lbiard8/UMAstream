@@ -44,6 +44,42 @@ Ferme puis rouvre ton terminal, puis lance `npm run share`. L'adresse publique s
 > Sur certains réseaux (Wi-Fi d'université, réseau d'entreprise), les PC ne peuvent pas se joindre entre eux :
 > le lien « réseau local » ne marchera pas, utilise `npm run share`.
 
+## Qualité côté streamer
+
+Avant de partager, le streamer choisit une **résolution** (Native, 1440p, 1080p, 720p, 480p, 360p) et un nombre
+d'**images par seconde** (60 ou 30). Le choix est retenu par le navigateur (par défaut : 1080p, 60 fps).
+Le débit max envoyé à chaque spectateur en découle :
+
+| Résolution | 30 fps | 60 fps |
+|---|---|---|
+| Native (ex. 4K) | 14 Mb/s | 20 Mb/s |
+| 1440p | 9 Mb/s | 14 Mb/s |
+| 1080p | 6 Mb/s | 9 Mb/s |
+| 720p | 3 Mb/s | 4,5 Mb/s |
+| 480p | 1,5 Mb/s | 2,2 Mb/s |
+| 360p | 0,8 Mb/s | 1,2 Mb/s |
+
+60 fps = 2× plus d'images, mais elles se ressemblent et se compressent mieux : environ ×1,5 de débit.
+
+## Qualité côté spectateur
+
+Chaque spectateur choisit sa qualité dans **⚙️ Options** : **Max** (celle du streamer), 1080p, 720p, 480p ou 360p.
+
+- Le choix ne concerne que **sa** connexion : le streamer ajuste l'encodage pour ce spectateur seulement
+  (`sender.setParameters`), sans coupure. Les autres spectateurs ne sont pas touchés.
+- On ne dépasse jamais la qualité du streamer : demander 1080p sur un stream en 720p donne du 720p.
+- La résolution ne change **jamais** toute seule. Si la connexion sature, ce sont les fps ou la netteté qui baissent :
+  coche **Afficher les stats** (en haut à droite de la vidéo, aussi en plein écran) pour le voir, et baisse la qualité.
+- Le choix de qualité et l'affichage des stats sont retenus par le navigateur.
+
+| Choix | Résolution | Débit max |
+|---|---|---|
+| Max | Celle du streamer | Celui du streamer |
+| 1080p | 1920×1080 | 8 Mb/s (plafonné au débit du streamer) |
+| 720p | 1280×720 | 4 Mb/s |
+| 480p | 853×480 | 1,5 Mb/s |
+| 360p | 640×360 | 0,8 Mb/s |
+
 ## Structure
 
 ```
@@ -51,7 +87,7 @@ shared/messages.ts   Types des messages WebSocket (partagés client/serveur)
 server/server.ts     Serveur HTTP (fichiers du site) + signalisation WebSocket
 server/network.ts    Adresses joignables par les autres PC : IP locale et tunnel Cloudflare
 client/main.ts       Code navigateur : mode streamer et mode spectateur
-public/              index.html, style.css, app.js (généré)
+public/              main-page.html (servie sur "/"), style.css, app.js (généré)
 ```
 
 ## Comment ça marche

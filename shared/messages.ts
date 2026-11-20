@@ -2,10 +2,15 @@
 // Ce fichier est importé à la fois par le client et par le serveur : si on change
 // un message d'un côté, TypeScript signale tout de suite ce qui casse de l'autre.
 
-/** Données WebRTC que le serveur fait suivre sans les lire. */
+/** Qualité demandée par un spectateur. "max" = celle choisie par le streamer. */
+export type ViewerQuality = "max" | "1080p" | "720p" | "480p" | "360p";
+
+/** Données échangées entre streamer et spectateur, que le serveur fait suivre sans les lire. */
 export type SignalData =
   | { kind: "offer" | "answer"; sdp: string }
-  | { kind: "ice"; candidate: RTCIceCandidateInit };
+  | { kind: "ice"; candidate: RTCIceCandidateInit }
+  // Spectateur -> streamer : "envoie-moi cette qualité" (ne concerne que SA connexion)
+  | { kind: "quality"; preset: ViewerQuality };
 
 /** Qui pourra ouvrir le lien : n'importe qui, le réseau local seulement, ou ce PC seulement. */
 export type ShareReach = "internet" | "lan" | "local";
