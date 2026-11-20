@@ -61,6 +61,17 @@ Le débit max envoyé à chaque spectateur en découle :
 
 60 fps = 2× plus d'images, mais elles se ressemblent et se compressent mieux : environ ×1,5 de débit.
 
+## Changer d'écran pendant le stream
+
+Le bouton **🔄 Changer d'écran** rouvre la fenêtre de choix du navigateur, avec la même résolution et les mêmes fps.
+Le stream continue : même salon, même lien, les spectateurs restent connectés et voient simplement l'image changer.
+
+- Côté code, on remplace la piste envoyée à chaque spectateur avec `sender.replaceTrack()`, sans renégocier.
+- La qualité choisie par chaque spectateur est réappliquée, car le nouvel écran peut avoir une autre résolution.
+- Un emplacement audio est toujours réservé dans chaque connexion, même vide : on peut ainsi passer d'une fenêtre
+  sans son à un onglet avec du son (et inversement).
+- Annuler la fenêtre de choix ne change rien : l'écran actuel continue.
+
 ## Qualité côté spectateur
 
 Chaque spectateur choisit sa qualité dans **⚙️ Options** : **Max** (celle du streamer), 1080p, 720p, 480p ou 360p.

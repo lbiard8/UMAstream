@@ -129,10 +129,9 @@ function startStreamerMode() {
     const fps = Number(fpsSelect.value);
     const quality = streamQuality(resolution, isFps(fps) ? fps : 60);
 
-    // 1. Capture de l'écran (le navigateur affiche sa fenêtre de choix)
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getDisplayMedia({
+    /** Ouvre la fenêtre de choix d'écran du navigateur (au démarrage, puis à chaque "Changer d'écran"). */
+    const captureScreen = async () => {
+      const captured = await navigator.mediaDevices.getDisplayMedia({
         video: {
           width: quality.width && { ideal: quality.width },
           height: quality.height && { ideal: quality.height },
@@ -140,14 +139,25 @@ function startStreamerMode() {
         },
         audio: true, // son du PC : marche avec Chrome/Edge en partageant l'écran entier ou un onglet
       });
+      // Indice pour l'encodeur : "motion" = garder les fps, "detail" = garder la netteté
+      captured.getVideoTracks()[0]!.contentHint = quality.hint;
+      return captured;
+    };
+
+    // 1. Capture de l'écran (le navigateur affiche sa fenêtre de choix)
+    // `let` : stream et videoTrack sont remplacés quand on change d'écran.
+    let stream: MediaStream;
+    try {
+      stream = await captureScreen();
     } catch {
       setStatus("Partage annulé.");
       return;
     }
+    let videoTrack = stream.getVideoTracks()[0]!;
 
-    const videoTrack = stream.getVideoTracks()[0]!;
-    // Indice pour l'encodeur : "motion" = garder les fps, "detail" = garder la netteté
-    videoTrack.contentHint = quality.hint;
+    // Flux "étiquette" commun à la vidéo et au son : côté spectateur, les deux pistes arrivent
+    // ainsi dans le MÊME MediaStream (celui affiché par <video>), même après un changement d'écran.
+    const outStream = new MediaStream();
 
     const preview = $<HTMLVideoElement>("preview");
     preview.srcObject = stream;
@@ -158,7 +168,11 @@ function startStreamerMode() {
 
     // 2. Connexion au serveur de signalisation
     const peerConnections = new Map<string, RTCPeerConnection>(); // une par spectateur
+    // Qualité demandée par chaque spectateur : à réappliquer quand on change d'écran,
+    // car le nouvel écran n'a pas forcément la même résolution.
+    const viewerQualities = new Map<string, ViewerQuality>();
     const updateCount = () => ($("viewer-count").textContent = String(peerConnections.size));
+    startStreamerDiagnostics(peerConnections, quality.fps);
 
     /**
      * Applique la qualité demandée par UN spectateur, sur SA connexion uniquement.
@@ -212,12 +226,13 @@ function startStreamerMode() {
           // sendEncodings permet de fixer le débit max : c'est ce qui fait la différence de qualité
           pc.addTransceiver(videoTrack, {
             direction: "sendonly",
-            streams: [stream],
+            streams: [outStream],
             sendEncodings: [{ maxBitrate: quality.bitrate, maxFramerate: quality.fps }],
           });
-          for (const audioTrack of stream.getAudioTracks()) {
-            pc.addTransceiver(audioTrack, { direction: "sendonly", streams: [stream] });
-          }
+          // Emplacement audio TOUJOURS réservé, même si l'écran actuel n'a pas de son ("audio" = vide).
+          // replaceTrack() ne peut remplir qu'un emplacement qui existe déjà : sans ça, passer d'une
+          // fenêtre muette à un onglet avec du son obligerait à renégocier la connexion.
+          pc.addTransceiver(stream.getAudioTracks()[0] ?? "audio", { direction: "sendonly", streams: [outStream] });
 
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
@@ -228,14 +243,19 @@ function startStreamerMode() {
         case "signal": {
           const pc = peerConnections.get(msg.from);
           if (!pc) break;
-          if (msg.data.kind === "quality") await applyViewerQuality(pc, msg.data.preset);
-          else await applySignal(pc, msg.data);
+          if (msg.data.kind === "quality") {
+            viewerQualities.set(msg.from, msg.data.preset);
+            await applyViewerQuality(pc, msg.data.preset);
+          } else {
+            await applySignal(pc, msg.data);
+          }
           break;
         }
 
         case "viewer-left": {
           peerConnections.get(msg.viewerId)?.close();
           peerConnections.delete(msg.viewerId);
+          viewerQualities.delete(msg.viewerId);
           updateCount();
           break;
         }
@@ -258,6 +278,49 @@ function startStreamerMode() {
     };
     videoTrack.addEventListener("ended", stop);
     $("stop-btn").addEventListener("click", stop);
+
+    // 5. Changer d'écran sans couper le stream : même salon, même lien, spectateurs toujours connectés.
+    const switchBtn = $<HTMLButtonElement>("switch-btn");
+    switchBtn.addEventListener("click", async () => {
+      switchBtn.disabled = true; // évite d'ouvrir deux fenêtres de choix
+      try {
+        let newStream: MediaStream;
+        try {
+          newStream = await captureScreen();
+        } catch {
+          setStatus("Changement annulé : l'écran actuel continue.");
+          return;
+        }
+
+        const oldStream = stream;
+        const oldVideoTrack = videoTrack;
+        stream = newStream;
+        videoTrack = newStream.getVideoTracks()[0]!;
+        const newAudioTrack = newStream.getAudioTracks()[0] ?? null; // null = pas de son sur ce nouvel écran
+
+        // replaceTrack() : on change ce qui est envoyé, sans renégocier. Le spectateur voit juste l'image changer.
+        for (const [viewerId, pc] of peerConnections) {
+          for (const transceiver of pc.getTransceivers()) {
+            // receiver.track existe toujours (même si sender.track est vide) : il donne le type d'emplacement
+            const kind = transceiver.receiver.track.kind;
+            await transceiver.sender.replaceTrack(kind === "video" ? videoTrack : newAudioTrack);
+          }
+          // La résolution du nouvel écran peut être différente : on recalcule la qualité de ce spectateur
+          await applyViewerQuality(pc, viewerQualities.get(viewerId) ?? "max");
+        }
+
+        // PIÈGE : l'ancienne piste déclenchait stop() à sa fin. On détache l'écouteur AVANT de l'arrêter,
+        // sinon changer d'écran couperait tout le stream.
+        oldVideoTrack.removeEventListener("ended", stop);
+        oldStream.getTracks().forEach((t) => t.stop());
+        videoTrack.addEventListener("ended", stop);
+
+        preview.srcObject = stream;
+        setStatus("Écran changé !");
+      } finally {
+        switchBtn.disabled = false;
+      }
+    });
   });
 
   $("copy-btn").addEventListener("click", async () => {
@@ -265,6 +328,101 @@ function startStreamerMode() {
     $("copy-btn").textContent = "Copié !";
     setTimeout(() => ($("copy-btn").textContent = "Copier le lien"), 1500);
   });
+}
+
+// --- Diagnostic côté streamer ------------------------------------------------
+
+const LIMITATION_LABEL: Record<string, string> = {
+  none: "rien",
+  cpu: "processeur",
+  bandwidth: "débit",
+  other: "autre",
+};
+
+/**
+ * Affiche chaque seconde, pour chaque spectateur, ce que l'encodeur envoie vraiment
+ * et SURTOUT pourquoi il réduit la qualité (qualityLimitationReason) :
+ *   - "processeur" : l'encodage est trop lourd pour le CPU (souvent VP8 en logiciel)
+ *   - "débit"      : la connexion ou notre plafond maxBitrate ne suit pas
+ * Les pourcentages "depuis le début" montrent la part du temps passée limitée,
+ * pratique pour les chutes brèves (gros mouvements de caméra, effets).
+ */
+function startStreamerDiagnostics(peerConnections: Map<string, RTCPeerConnection>, targetFps: number) {
+  // Valeurs de la seconde précédente, pour calculer ce qui s'est passé PENDANT la dernière seconde
+  const last = new Map<
+    string,
+    { bytes: number; time: number; encoded: number; encodeTime: number; captured: number }
+  >();
+
+  setInterval(async () => {
+    if (peerConnections.size === 0) {
+      $("streamer-stats").textContent = "Diagnostic : en attente d'un spectateur…";
+      return;
+    }
+    const lines: string[] = [];
+    let index = 0;
+
+    for (const [viewerId, pc] of peerConnections) {
+      index++;
+      // Les champs des stats varient selon les navigateurs : on les lit de façon souple.
+      const stats = [...(await pc.getStats()).values()] as Record<string, any>[];
+      const out = stats.find((s) => s.type === "outbound-rtp" && s.kind === "video");
+      const source = stats.find((s) => s.type === "media-source" && s.kind === "video");
+      const pair = stats.find((s) => s.type === "candidate-pair" && s.nominated && s.state === "succeeded");
+
+      // La capture est la même pour tout le monde : on l'affiche une seule fois
+      if (index === 1 && source) {
+        lines.push(`Capture : ${source.width}×${source.height} · ${Math.round(source.framesPerSecond ?? 0)} fps`);
+      }
+      if (!out) {
+        lines.push(`Spectateur ${index} : connexion en cours…`);
+        continue;
+      }
+
+      const prev = last.get(viewerId);
+      const now = {
+        bytes: out.bytesSent ?? 0,
+        time: out.timestamp,
+        encoded: out.framesEncoded ?? 0,
+        encodeTime: out.totalEncodeTime ?? 0, // en secondes, cumulé
+        captured: source?.frames ?? 0, // images produites par la capture, cumulé
+      };
+      last.set(viewerId, now);
+      const mbps = prev ? ((now.bytes - prev.bytes) * 8) / ((now.time - prev.time) * 1000) : 0;
+
+      // Temps moyen pour encoder UNE image pendant la dernière seconde.
+      // À 60 fps, le budget est de 16,7 ms par image : au-delà, le processeur ne suit plus.
+      const encodedDelta = prev ? now.encoded - prev.encoded : 0;
+      const encodeMs = encodedDelta > 0 ? ((now.encodeTime - prev!.encodeTime) / encodedDelta) * 1000 : 0;
+      // Images capturées mais jamais encodées : l'encodeur les a sautées pour tenir son débit cible
+      const capturedDelta = prev ? now.captured - prev.captured : 0;
+      const skippedPct = capturedDelta > 0 ? Math.max(0, Math.round((1 - encodedDelta / capturedDelta) * 100)) : 0;
+      const targetMbps = out.targetBitrate ? (out.targetBitrate / 1e6).toFixed(1) : "?";
+
+      const durations: Record<string, number> = out.qualityLimitationDurations ?? {};
+      const total = Object.values(durations).reduce((a, b) => a + b, 0) || 1;
+      const pct = (key: string) => Math.round(((durations[key] ?? 0) / total) * 100);
+
+      const codec = stats.find((s) => s.id === out.codecId)?.mimeType?.replace("video/", "") ?? "?";
+      const hardware =
+        out.powerEfficientEncoder === true ? "matériel" : out.powerEfficientEncoder === false ? "logiciel" : "?";
+      const available = pair?.availableOutgoingBitrate
+        ? `${(pair.availableOutgoingBitrate / 1e6).toFixed(1)} Mb/s`
+        : "?";
+
+      lines.push(
+        `Spectateur ${index} : envoyé ${out.frameWidth ?? "?"}×${out.frameHeight ?? "?"} · ` +
+          `${Math.round(out.framesPerSecond ?? 0)} fps · ${mbps.toFixed(1)} Mb/s (débit dispo estimé : ${available})`,
+        `  Encodage : ${encodeMs.toFixed(1)} ms/image (budget ${(1000 / targetFps).toFixed(1)} ms à ${targetFps} fps)` +
+          ` · images sautées : ${skippedPct} % · débit cible encodeur : ${targetMbps} Mb/s`,
+        `  Limité maintenant par : ${LIMITATION_LABEL[out.qualityLimitationReason] ?? "?"}` +
+          ` · depuis le début : processeur ${pct("cpu")} %, débit ${pct("bandwidth")} %`,
+        `  Codec : ${codec}` +
+          (out.encoderImplementation ? ` · encodeur : ${out.encoderImplementation} (${hardware})` : ""),
+      );
+    }
+    $("streamer-stats").textContent = lines.join("\n");
+  }, 1000);
 }
 
 // --- Mode spectateur ---------------------------------------------------------
