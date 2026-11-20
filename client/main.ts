@@ -124,10 +124,16 @@ function startStreamerMode() {
   resolutionSelect.addEventListener("change", () => savePref("streamResolution", resolutionSelect.value));
   fpsSelect.addEventListener("change", () => savePref("streamFps", fpsSelect.value));
 
-  startBtn.addEventListener("click", async () => {
+  /** Qualité correspondant à ce qui est sélectionné dans les deux menus. */
+  const selectedQuality = () => {
     const resolution = isResolutionKey(resolutionSelect.value) ? resolutionSelect.value : "1080";
     const fps = Number(fpsSelect.value);
-    const quality = streamQuality(resolution, isFps(fps) ? fps : 60);
+    return streamQuality(resolution, isFps(fps) ? fps : 60);
+  };
+
+  startBtn.addEventListener("click", async () => {
+    // `let` : la qualité peut changer pendant le stream (menus Résolution / Fps)
+    let quality = selectedQuality();
 
     /** Ouvre la fenêtre de choix d'écran du navigateur (au démarrage, puis à chaque "Changer d'écran"). */
     const captureScreen = async () => {
@@ -163,8 +169,7 @@ function startStreamerMode() {
     preview.srcObject = stream;
     preview.hidden = false;
     startBtn.disabled = true;
-    resolutionSelect.disabled = true;
-    fpsSelect.disabled = true;
+    // Les menus Résolution / Fps restent actifs : ils changent la qualité en direct (voir étape 6)
 
     // 2. Connexion au serveur de signalisation
     const peerConnections = new Map<string, RTCPeerConnection>(); // une par spectateur
@@ -172,7 +177,7 @@ function startStreamerMode() {
     // car le nouvel écran n'a pas forcément la même résolution.
     const viewerQualities = new Map<string, ViewerQuality>();
     const updateCount = () => ($("viewer-count").textContent = String(peerConnections.size));
-    startStreamerDiagnostics(peerConnections, quality.fps);
+    startStreamerDiagnostics(peerConnections, () => quality.fps);
 
     /**
      * Applique la qualité demandée par UN spectateur, sur SA connexion uniquement.
@@ -191,6 +196,8 @@ function startStreamerMode() {
       // Math.max(1, …) : on ne grossit jamais l'image au-delà de ce que capture le streamer.
       encoding.scaleResolutionDownBy = target ? Math.max(1, sourceHeight / target.height) : 1;
       encoding.maxBitrate = target ? Math.min(quality.bitrate, target.bitrate) : quality.bitrate;
+      // Les fps du streamer peuvent changer en direct : on met aussi à jour le plafond d'images/s
+      encoding.maxFramerate = quality.fps;
       await sender.setParameters(params);
     };
 
@@ -321,6 +328,43 @@ function startStreamerMode() {
         switchBtn.disabled = false;
       }
     });
+
+    // 6. Changer la résolution / les fps en direct, sans rouvrir la fenêtre de choix d'écran.
+    // applyConstraints() redimensionne la capture en cours : même écran, spectateurs toujours connectés.
+    const applyStreamQuality = async () => {
+      quality = selectedQuality();
+      // "Native" : on redemande la taille maximale de l'écran partagé (sinon la capture resterait réduite)
+      const caps = videoTrack.getCapabilities();
+      const width = quality.width ?? caps.width?.max;
+      const height = quality.height ?? caps.height?.max;
+      try {
+        await videoTrack.applyConstraints({
+          width: width && { ideal: width },
+          height: height && { ideal: height },
+          frameRate: { ideal: quality.fps },
+        });
+      } catch (err) {
+        console.error(err);
+        setStatus("Impossible d'appliquer cette qualité à la capture.", true);
+        return;
+      }
+      // Nouveau débit, nouvelle résolution source : on réapplique la qualité choisie par CHAQUE spectateur
+      // (un spectateur en 1080p redescend en 720p si le streamer passe en 720p, et remonte ensuite).
+      for (const [viewerId, pc] of peerConnections) {
+        await applyViewerQuality(pc, viewerQualities.get(viewerId) ?? "max");
+      }
+      const label = resolutionSelect.selectedOptions[0]?.text ?? "";
+      setStatus(`Qualité changée : ${label} · ${quality.fps} fps`);
+    };
+
+    // File d'attente : si on change la résolution PUIS les fps très vite, les deux s'appliquent
+    // l'un après l'autre, dans l'ordre, au lieu de se marcher dessus.
+    let qualityQueue = Promise.resolve();
+    const onQualityChange = () => {
+      qualityQueue = qualityQueue.then(applyStreamQuality);
+    };
+    resolutionSelect.addEventListener("change", onQualityChange);
+    fpsSelect.addEventListener("change", onQualityChange);
   });
 
   $("copy-btn").addEventListener("click", async () => {
@@ -347,14 +391,24 @@ const LIMITATION_LABEL: Record<string, string> = {
  * Les pourcentages "depuis le début" montrent la part du temps passée limitée,
  * pratique pour les chutes brèves (gros mouvements de caméra, effets).
  */
-function startStreamerDiagnostics(peerConnections: Map<string, RTCPeerConnection>, targetFps: number) {
+function startStreamerDiagnostics(peerConnections: Map<string, RTCPeerConnection>, getTargetFps: () => number) {
   // Valeurs de la seconde précédente, pour calculer ce qui s'est passé PENDANT la dernière seconde
   const last = new Map<
     string,
     { bytes: number; time: number; encoded: number; encodeTime: number; captured: number }
   >();
 
+  // Bouton 🔧 Diagnostic : affiche / masque la zone (masquée par défaut)
+  const diagBtn = $("diag-btn");
+  diagBtn.addEventListener("click", () => {
+    const show = $("streamer-stats").hidden !== false;
+    $("streamer-stats").hidden = !show;
+    diagBtn.setAttribute("aria-expanded", String(show));
+  });
+
   setInterval(async () => {
+    // Zone masquée : inutile de lire les stats
+    if ($("streamer-stats").hidden !== false) return;
     if (peerConnections.size === 0) {
       $("streamer-stats").textContent = "Diagnostic : en attente d'un spectateur…";
       return;
@@ -413,7 +467,7 @@ function startStreamerDiagnostics(peerConnections: Map<string, RTCPeerConnection
       lines.push(
         `Spectateur ${index} : envoyé ${out.frameWidth ?? "?"}×${out.frameHeight ?? "?"} · ` +
           `${Math.round(out.framesPerSecond ?? 0)} fps · ${mbps.toFixed(1)} Mb/s (débit dispo estimé : ${available})`,
-        `  Encodage : ${encodeMs.toFixed(1)} ms/image (budget ${(1000 / targetFps).toFixed(1)} ms à ${targetFps} fps)` +
+        `  Encodage : ${encodeMs.toFixed(1)} ms/image (budget ${(1000 / getTargetFps()).toFixed(1)} ms à ${getTargetFps()} fps)` +
           ` · images sautées : ${skippedPct} % · débit cible encodeur : ${targetMbps} Mb/s`,
         `  Limité maintenant par : ${LIMITATION_LABEL[out.qualityLimitationReason] ?? "?"}` +
           ` · depuis le début : processeur ${pct("cpu")} %, débit ${pct("bandwidth")} %`,
