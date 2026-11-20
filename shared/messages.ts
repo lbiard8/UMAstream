@@ -10,7 +10,9 @@ export type SignalData =
   | { kind: "offer" | "answer"; sdp: string }
   | { kind: "ice"; candidate: RTCIceCandidateInit }
   // Spectateur -> streamer : "envoie-moi cette qualité" (ne concerne que SA connexion)
-  | { kind: "quality"; preset: ViewerQuality };
+  | { kind: "quality"; preset: ViewerQuality }
+  // Streamer -> spectateur : le stream est en pause (ou reprend). La connexion, elle, reste ouverte.
+  | { kind: "pause"; paused: boolean };
 
 /** Qui pourra ouvrir le lien : n'importe qui, le réseau local seulement, ou ce PC seulement. */
 export type ShareReach = "internet" | "lan" | "local";

@@ -35,7 +35,6 @@
         <label for="resolution">Résolution</label>
         <select id="resolution">
           <option value="native">Native</option>
-          <option value="1440">1440p</option>
           <option value="1080" selected>1080p</option>
           <option value="720">720p</option>
           <option value="480">480p</option>
@@ -52,7 +51,7 @@
       </div>
 
       <div id="live-panel" class="card" hidden>
-        <p class="live"><span class="dot"></span> En direct · <span id="viewer-count">0</span> spectateur(s)</p>
+        <p class="live"><span class="dot"></span> <span id="live-label">En direct</span> · <span id="viewer-count">0</span> spectateur(s)</p>
         <!-- Diagnostic de l'encodage : masqué par défaut, rempli chaque seconde par main.ts quand il est ouvert -->
         <div id="streamer-stats" class="streamer-stats" hidden></div>
         <div class="share">
@@ -64,6 +63,7 @@
           🔒 Ne partage ce lien qu'avec des personnes de confiance : elles pourront voir ton adresse IP.
         </p>
         <p class="reach">🔑 Envoie le mot de passe à part (en vocal, en message privé), jamais avec le lien.</p>
+        <button id="pause-btn">⏸ Pause</button>
         <button id="switch-btn">🔄 Changer d'écran</button>
         <button id="diag-btn" aria-expanded="false" aria-controls="streamer-stats">🔧 Diagnostic</button>
         <button id="stop-btn" class="danger">Arrêter le partage</button>
@@ -89,6 +89,8 @@
         <div id="video-wrap" class="video-wrap">
           <video id="remote" autoplay muted playsinline></video>
           <span id="stats" class="stats" hidden></span>
+          <!-- Bandeau affiché par-dessus la dernière image quand le streamer met en pause -->
+          <div id="pause-banner" class="pause-banner" hidden>⏸ Stream en pause</div>
         </div>
         <div class="controls">
           <button id="unmute-btn">🔊 Activer le son</button>

@@ -16,7 +16,6 @@ const RTC_CONFIG: RTCConfiguration = {
 // width/height undefined = "native" : on capture l'écran à sa vraie résolution.
 const RESOLUTIONS = {
   native: { width: undefined, height: undefined, bitrate: { 30: 14_000_000, 60: 20_000_000 } },
-  "1440": { width: 2560, height: 1440, bitrate: { 30: 9_000_000, 60: 14_000_000 } },
   "1080": { width: 1920, height: 1080, bitrate: { 30: 6_000_000, 60: 9_000_000 } },
   "720": { width: 1280, height: 720, bitrate: { 30: 3_000_000, 60: 4_500_000 } },
   "480": { width: 854, height: 480, bitrate: { 30: 1_500_000, 60: 2_200_000 } },
@@ -188,6 +187,8 @@ function startStreamerMode() {
     // Qualité demandée par chaque spectateur : à réappliquer quand on change d'écran,
     // car le nouvel écran n'a pas forcément la même résolution.
     const viewerQualities = new Map<string, ViewerQuality>();
+    // Pause : la capture continue sur ce PC, mais plus rien n'est envoyé aux spectateurs (voir étape 7)
+    let paused = false;
     const updateCount = () => ($("viewer-count").textContent = String(peerConnections.size));
     startStreamerDiagnostics(peerConnections, () => quality.fps);
 
@@ -196,7 +197,9 @@ function startStreamerMode() {
      * setParameters() change l'encodage à chaud : pas de renégociation, pas de coupure.
      */
     const applyViewerQuality = async (pc: RTCPeerConnection, preset: ViewerQuality) => {
-      const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+      // On cherche l'emplacement vidéo par son TYPE (receiver.track existe toujours), pas par sa piste :
+      // pendant une pause, sender.track vaut null, et le réglage serait sinon perdu.
+      const sender = pc.getTransceivers().find((t) => t.receiver.track.kind === "video")?.sender;
       if (!sender) return;
       const params = sender.getParameters();
       const encoding = params.encodings[0];
@@ -242,8 +245,9 @@ function startStreamerMode() {
             }
           };
 
-          // sendEncodings permet de fixer le débit max : c'est ce qui fait la différence de qualité
-          pc.addTransceiver(videoTrack, {
+          // sendEncodings permet de fixer le débit max : c'est ce qui fait la différence de qualité.
+          // En pause, on réserve l'emplacement ("video" = vide) sans rien envoyer : la reprise le remplira.
+          pc.addTransceiver(paused ? "video" : videoTrack, {
             direction: "sendonly",
             streams: [outStream],
             sendEncodings: [{ maxBitrate: quality.bitrate, maxFramerate: quality.fps }],
@@ -251,11 +255,14 @@ function startStreamerMode() {
           // Emplacement audio TOUJOURS réservé, même si l'écran actuel n'a pas de son ("audio" = vide).
           // replaceTrack() ne peut remplir qu'un emplacement qui existe déjà : sans ça, passer d'une
           // fenêtre muette à un onglet avec du son obligerait à renégocier la connexion.
-          pc.addTransceiver(stream.getAudioTracks()[0] ?? "audio", { direction: "sendonly", streams: [outStream] });
+          const audioTrack = stream.getAudioTracks()[0];
+          pc.addTransceiver(!paused && audioTrack ? audioTrack : "audio", { direction: "sendonly", streams: [outStream] });
 
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           send({ type: "signal", to: msg.viewerId, data: { kind: "offer", sdp: offer.sdp! } });
+          // Arrivé pendant une pause : on le lui dit tout de suite (sinon il attendrait l'image sans savoir pourquoi)
+          if (paused) send({ type: "signal", to: msg.viewerId, data: { kind: "pause", paused: true } });
           break;
         }
 
@@ -319,10 +326,13 @@ function startStreamerMode() {
 
         // replaceTrack() : on change ce qui est envoyé, sans renégocier. Le spectateur voit juste l'image changer.
         for (const [viewerId, pc] of peerConnections) {
-          for (const transceiver of pc.getTransceivers()) {
-            // receiver.track existe toujours (même si sender.track est vide) : il donne le type d'emplacement
-            const kind = transceiver.receiver.track.kind;
-            await transceiver.sender.replaceTrack(kind === "video" ? videoTrack : newAudioTrack);
+          // En pause, on ne renvoie rien : le nouvel écran sera envoyé à la reprise
+          if (!paused) {
+            for (const transceiver of pc.getTransceivers()) {
+              // receiver.track existe toujours (même si sender.track est vide) : il donne le type d'emplacement
+              const kind = transceiver.receiver.track.kind;
+              await transceiver.sender.replaceTrack(kind === "video" ? videoTrack : newAudioTrack);
+            }
           }
           // La résolution du nouvel écran peut être différente : on recalcule la qualité de ce spectateur
           await applyViewerQuality(pc, viewerQualities.get(viewerId) ?? "max");
@@ -335,7 +345,7 @@ function startStreamerMode() {
         videoTrack.addEventListener("ended", stop);
 
         preview.srcObject = stream;
-        setStatus("Écran changé !");
+        setStatus(paused ? "Écran changé : il sera envoyé à la reprise." : "Écran changé !");
       } finally {
         switchBtn.disabled = false;
       }
@@ -377,6 +387,33 @@ function startStreamerMode() {
     };
     resolutionSelect.addEventListener("change", onQualityChange);
     fpsSelect.addEventListener("change", onQualityChange);
+
+    // 7. Pause sans couper le stream : même salon, même lien, connexions toujours ouvertes.
+    // replaceTrack(null) arrête l'envoi (plus d'image ni de son, presque plus de bande passante) ;
+    // chez le spectateur, la dernière image reste figée avec un bandeau "Stream en pause".
+    const pauseBtn = $<HTMLButtonElement>("pause-btn");
+    pauseBtn.addEventListener("click", async () => {
+      pauseBtn.disabled = true;
+      try {
+        paused = !paused;
+        const audioTrack = stream.getAudioTracks()[0] ?? null;
+        for (const [viewerId, pc] of peerConnections) {
+          for (const transceiver of pc.getTransceivers()) {
+            const kind = transceiver.receiver.track.kind;
+            await transceiver.sender.replaceTrack(paused ? null : kind === "video" ? videoTrack : audioTrack);
+          }
+          // À la reprise, l'écran ou la qualité ont pu changer pendant la pause : on réapplique
+          if (!paused) await applyViewerQuality(pc, viewerQualities.get(viewerId) ?? "max");
+          send({ type: "signal", to: viewerId, data: { kind: "pause", paused } });
+        }
+        pauseBtn.textContent = paused ? "▶ Reprendre" : "⏸ Pause";
+        $("live-label").textContent = paused ? "En pause" : "En direct";
+        $("live-panel").classList.toggle("is-paused", paused);
+        setStatus(paused ? "Stream en pause : tes spectateurs restent connectés." : "Stream repris !");
+      } finally {
+        pauseBtn.disabled = false;
+      }
+    });
   });
 
   $("copy-btn").addEventListener("click", async () => {
@@ -574,6 +611,10 @@ function startViewerMode(roomId: string) {
           // dès qu'il a traité la réponse, les messages arrivant dans l'ordre)
           send({ type: "signal", to: "streamer", data: { kind: "quality", preset: viewerQuality } });
           startStats(pc);
+        } else if (msg.data.kind === "pause") {
+          // La connexion reste ouverte : la dernière image reste figée, on affiche juste le bandeau
+          $("pause-banner").hidden = !msg.data.paused;
+          if (msg.data.paused) setStatus("");
         } else if (pc) {
           await applySignal(pc, msg.data);
         }

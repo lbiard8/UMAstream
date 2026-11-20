@@ -1,6 +1,6 @@
 # UMAstream
 
-Partage d'écran en haute qualité (1080p / 1440p, jusqu'à 60 fps) directement dans le navigateur, via WebRTC.
+Partage d'écran en haute qualité (jusqu'à la résolution native de l'écran, 60 fps) directement dans le navigateur, via WebRTC.
 Pas de compte, pas d'installation : tu partages, tu envoies le lien, tes potes regardent.
 
 ## Lancer le projet
@@ -64,18 +64,20 @@ Le streamer choisit un **mot de passe obligatoire** avant de partager. Les spect
 
 ## Qualité côté streamer
 
-Avant de partager, le streamer choisit une **résolution** (Native, 1440p, 1080p, 720p, 480p, 360p) et un nombre
+Avant de partager, le streamer choisit une **résolution** (Native, 1080p, 720p, 480p, 360p) et un nombre
 d'**images par seconde** (60 ou 30). Le choix est retenu par le navigateur (par défaut : 1080p, 60 fps).
 Le débit max envoyé à chaque spectateur en découle :
 
 | Résolution | 30 fps | 60 fps |
 |---|---|---|
 | Native (ex. 4K) | 14 Mb/s | 20 Mb/s |
-| 1440p | 9 Mb/s | 14 Mb/s |
 | 1080p | 6 Mb/s | 9 Mb/s |
 | 720p | 3 Mb/s | 4,5 Mb/s |
 | 480p | 1,5 Mb/s | 2,2 Mb/s |
 | 360p | 0,8 Mb/s | 1,2 Mb/s |
+
+> La capture ne peut jamais dépasser la résolution de l'écran partagé : sur un écran 1080p, rien ne peut donner
+> plus que du 1080p. Pour un écran 1440p ou 4K, choisis **Native**, qui prend sa vraie résolution.
 
 60 fps = 2× plus d'images, mais elles se ressemblent et se compressent mieux : environ ×1,5 de débit.
 
@@ -94,6 +96,19 @@ Le stream continue : même salon, même lien, les spectateurs restent connectés
 - Un emplacement audio est toujours réservé dans chaque connexion, même vide : on peut ainsi passer d'une fenêtre
   sans son à un onglet avec du son (et inversement).
 - Annuler la fenêtre de choix ne change rien : l'écran actuel continue.
+
+## Mettre en pause
+
+Le bouton **⏸ Pause** arrête l'envoi sans couper le stream : même salon, même lien, et les spectateurs restent
+connectés, sans avoir à retaper le mot de passe. **▶ Reprendre** relance l'image instantanément.
+
+- Côté code : `sender.replaceTrack(null)` arrête l'envoi de l'image et du son (presque plus de bande passante),
+  puis `replaceTrack(piste)` le relance. La connexion WebRTC, elle, reste ouverte.
+- Les spectateurs voient la **dernière image figée** avec un bandeau « ⏸ Stream en pause ».
+- La capture continue sur ton PC (la barre « … partage votre écran » de Chrome reste affichée) : c'est ce qui
+  permet de reprendre sans rechoisir l'écran.
+- Un spectateur qui arrive pendant la pause voit directement le bandeau, et reçoit l'image à la reprise.
+- « Changer d'écran » et les changements de qualité pendant la pause sont pris en compte à la reprise.
 
 ## Qualité côté spectateur
 
