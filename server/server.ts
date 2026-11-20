@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
 import { WebSocketServer, WebSocket } from "ws";
 import { MAX_NAME_LENGTH, type ClientMessage, type ServerMessage, type ShareReach } from "../shared/messages.js";
 import { getLanIp, startTunnel } from "./network.js";
@@ -30,6 +31,22 @@ import {
 const PORT = Number(process.env.PORT ?? 3000);
 // `npm run share` ajoute --tunnel : on crée alors une adresse publique via Cloudflare
 const WANT_TUNNEL = process.argv.includes("--tunnel");
+// `--open` (ajouté par le lanceur UMAstream.cmd) : ouvrir la page dans le navigateur une fois prêt
+const WANT_OPEN = process.argv.includes("--open");
+const LOCAL_URL = `http://localhost:${PORT}`;
+
+/** Ouvre une adresse dans le navigateur par défaut (Windows, macOS ou Linux). */
+function openBrowser(url: string) {
+  const [command, args] =
+    process.platform === "win32"
+      ? ["cmd", ["/c", "start", "", url]] // le "" est le titre de fenêtre attendu par "start"
+      : process.platform === "darwin"
+        ? ["open", [url]]
+        : ["xdg-open", [url]];
+  const child = spawn(command, args, { detached: true, stdio: "ignore" });
+  child.on("error", () => console.log(`Ouvre ${url} dans ton navigateur.`));
+  child.unref(); // le serveur ne garde pas de lien avec le navigateur
+}
 
 /** Adresse publique du tunnel, connue quelques secondes après le démarrage. */
 let tunnelUrl: string | null = null;
@@ -53,6 +70,8 @@ const MIME: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".map": "application/json",
   ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
 };
 
 const httpServer = createServer(async (req, res) => {
@@ -398,8 +417,21 @@ function handleDisconnect(ws: WebSocket) {
   }
 }
 
+// Port déjà utilisé : le plus souvent, UMAstream tourne déjà (double-clic sur l'icône alors qu'il est
+// ouvert). Au lieu de planter, on ouvre la page existante et on s'arrête proprement.
+// (Le serveur WebSocket fait remonter les erreurs du serveur HTTP : c'est donc lui qu'on écoute.)
+wss.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    console.log(`UMAstream tourne déjà sur le port ${PORT} : ouverture de la page existante.`);
+    if (WANT_OPEN) openBrowser(LOCAL_URL);
+    process.exit(0);
+  }
+  console.error(err);
+  process.exit(1);
+});
+
 httpServer.listen(PORT, async () => {
-  console.log(`UMAstream prêt sur http://localhost:${PORT}`);
+  console.log(`UMAstream prêt sur ${LOCAL_URL}`);
   if (lanIp) console.log(`  Réseau local : http://${lanIp}:${PORT}`);
 
   if (WANT_TUNNEL) {
@@ -409,4 +441,8 @@ httpServer.listen(PORT, async () => {
   } else {
     console.log("  (Pour un lien accessible depuis internet : npm run share)");
   }
+
+  // Après le tunnel : ainsi, le lien généré dans la page utilise déjà l'adresse internet
+  if (WANT_OPEN) openBrowser(LOCAL_URL);
+  console.log("\nPour arrêter UMAstream : ferme cette fenêtre (ou Ctrl+C).");
 });

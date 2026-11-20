@@ -3,7 +3,28 @@
 Partage d'écran en haute qualité (jusqu'à la résolution native de l'écran, 60 fps) directement dans le navigateur, via WebRTC.
 Pas de compte, pas d'installation : tu partages, tu envoies le lien, tes potes regardent.
 
-## Lancer le projet
+## Lancer l'appli
+
+### Le plus simple : l'icône du bureau (Windows)
+
+Une seule fois, après avoir récupéré le projet :
+
+```powershell
+npm run shortcut
+```
+
+Une icône **UMAstream** apparaît sur ton bureau. Un double-clic dessus :
+1. installe les dépendances si besoin (première utilisation) ;
+2. lance le serveur avec le tunnel (comme `npm run share`) ;
+3. ouvre `http://localhost:3000` dans ton navigateur, une fois le lien internet prêt.
+
+Une fenêtre de terminal s'ouvre réduite dans la barre des tâches : **la fermer arrête UMAstream**.
+Double-cliquer alors que l'appli tourne déjà ouvre simplement la page existante.
+
+> `UMAstream.cmd`, à la racine du projet, fait la même chose si tu préfères double-cliquer dessus.
+> Si tu déplaces le dossier du projet, relance `npm run shortcut`.
+
+### À la main
 
 ```bash
 npm install
@@ -18,6 +39,8 @@ Puis ouvre http://localhost:3000, clique sur **Partager mon écran** et ouvre le
 | `npm run share` | Pareil, avec en plus un tunnel Cloudflare : le lien marche depuis n'importe où |
 | `npm run build:client` | Compile `client/main.ts` en `public/app.js` (esbuild) |
 | `npm run typecheck` | Vérifie les types de tout le projet (TypeScript) |
+| `npm run shortcut` | Crée l'icône UMAstream sur le bureau (Windows) |
+| `npm run icon` | Régénère `assets/umastream.ico` à partir de `public/logo.png` (si tu changes de logo) |
 
 ## Streamer à distance
 
@@ -189,7 +212,10 @@ server/network.ts    Adresses joignables par les autres PC : IP locale et tunnel
 server/password.ts   Accès aux salons : hachage scrypt, limite d'essais par IP, délai après un refus
 server/limits.ts     Plafonds anti-abus : connexions par IP et au total, demandes par minute
 client/main.ts       Code navigateur : mode streamer et mode spectateur
-public/              main-page.html (servie sur "/"), style.css, app.js (généré)
+public/              main-page.html (servie sur "/"), style.css, logo.png, app.js (généré)
+assets/umastream.ico Icône du raccourci, générée à partir de public/logo.png
+scripts/             make-icon.ps1 (génère l'icône), create-shortcut.ps1 (crée le raccourci)
+UMAstream.cmd        Lanceur : dépendances + serveur + tunnel + navigateur, en un double-clic
 ```
 
 ## Comment ça marche
