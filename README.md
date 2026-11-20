@@ -61,6 +61,11 @@ Le débit max envoyé à chaque spectateur en découle :
 
 60 fps = 2× plus d'images, mais elles se ressemblent et se compressent mieux : environ ×1,5 de débit.
 
+**Pendant le stream**, les deux menus restent actifs : un changement s'applique immédiatement, sans rouvrir la
+fenêtre de choix d'écran (`videoTrack.applyConstraints()` redimensionne la capture en cours). Chaque spectateur
+garde sa qualité choisie, plafonnée à la nouvelle qualité du streamer : un spectateur en 1080p redescend en 720p
+si le streamer passe en 720p, et retrouve son 1080p quand le streamer remonte.
+
 ## Changer d'écran pendant le stream
 
 Le bouton **🔄 Changer d'écran** rouvre la fenêtre de choix du navigateur, avec la même résolution et les mêmes fps.
