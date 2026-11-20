@@ -10,18 +10,41 @@
   <header>
     <h1>UMA<span>stream</span></h1>
     <p class="tagline">Partage ton écran en vraie qualité, sans compte, sans installation.</p>
+
+    <!-- Options du spectateur, en haut à droite de la page. Cachées en mode streamer. -->
+    <div id="viewer-options" class="options" hidden>
+      <button id="options-btn" aria-expanded="false" aria-controls="options-panel">⚙️ Options</button>
+      <div id="options-panel" class="options-panel" hidden>
+        <label for="viewer-quality">Qualité</label>
+        <select id="viewer-quality">
+          <option value="max">Max (qualité du streamer)</option>
+          <option value="1080p">1080p</option>
+          <option value="720p">720p</option>
+          <option value="480p">480p</option>
+          <option value="360p">360p</option>
+        </select>
+        <label class="check"><input type="checkbox" id="show-stats" /> Afficher les stats</label>
+      </div>
+    </div>
   </header>
 
   <main>
     <!-- Vue "streamer" : affichée quand il n'y a pas de ?room= dans l'URL -->
     <section id="streamer-view" hidden>
       <div class="card">
-        <label for="quality">Qualité</label>
-        <select id="quality">
-          <option value="1080p60">1080p · 60 fps (jeux, fluide)</option>
-          <option value="1080p30">1080p · 30 fps (texte, code, net)</option>
-          <option value="1440p60">1440p · 60 fps (grosse connexion)</option>
-          <option value="source">Résolution native de l'écran</option>
+        <label for="resolution">Résolution</label>
+        <select id="resolution">
+          <option value="native">Native</option>
+          <option value="1440">1440p</option>
+          <option value="1080" selected>1080p</option>
+          <option value="720">720p</option>
+          <option value="480">480p</option>
+          <option value="360">360p</option>
+        </select>
+        <label for="fps">Fps</label>
+        <select id="fps">
+          <option value="60" selected>60</option>
+          <option value="30">30</option>
         </select>
         <button id="start-btn" class="primary">Partager mon écran</button>
       </div>
@@ -45,11 +68,15 @@
     <!-- Vue "spectateur" : affichée quand l'URL contient ?room=... -->
     <section id="viewer-view" hidden>
       <div class="player">
-        <video id="remote" autoplay muted playsinline></video>
+        <!-- video-wrap = la vidéo + les stats par-dessus. C'est CE bloc qui passe en plein écran,
+             pour que les stats restent visibles. -->
+        <div id="video-wrap" class="video-wrap">
+          <video id="remote" autoplay muted playsinline></video>
+          <span id="stats" class="stats" hidden></span>
+        </div>
         <div class="controls">
           <button id="unmute-btn">🔊 Activer le son</button>
           <button id="fullscreen-btn">⛶ Plein écran</button>
-          <span id="stats" class="stats"></span>
         </div>
       </div>
     </section>

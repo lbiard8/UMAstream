@@ -2,7 +2,7 @@
 //  - streamer   : pas de ?room= dans l'URL -> on capture l'écran et on crée un salon
 //  - spectateur : URL avec ?room=xxxx      -> on rejoint le salon et on affiche la vidéo
 
-import type { ClientMessage, ServerMessage, ShareReach, SignalData } from "../shared/messages.js";
+import type { ClientMessage, ServerMessage, ShareReach, SignalData, ViewerQuality } from "../shared/messages.js";
 
 // Serveur STUN public : il aide chaque navigateur à découvrir son adresse publique
 // pour traverser la box. (Pour les réseaux très fermés il faudra un serveur TURN : V2.)
@@ -10,16 +10,49 @@ const RTC_CONFIG: RTCConfiguration = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 };
 
-// Préréglages de qualité. maxBitrate = débit max envoyé à CHAQUE spectateur.
-// hint "detail" : quand le réseau sature, Chrome baisse les fps mais GARDE la résolution.
-// ("motion" ferait l'inverse : il retomberait en 360p/540p, justement ce qu'on veut éviter.)
-const QUALITY = {
-  "1080p60": { width: 1920, height: 1080, fps: 60, bitrate: 8_000_000, hint: "detail" },
-  "1080p30": { width: 1920, height: 1080, fps: 30, bitrate: 6_000_000, hint: "detail" },
-  "1440p60": { width: 2560, height: 1440, fps: 60, bitrate: 14_000_000, hint: "detail" },
-  source: { width: undefined, height: undefined, fps: 60, bitrate: 12_000_000, hint: "detail" },
+// Qualité du streamer = une résolution + un nombre d'images par seconde.
+// bitrate = débit max envoyé à CHAQUE spectateur. À 60 fps il y a 2× plus d'images,
+// mais l'encodeur les compresse mieux (elles se ressemblent) : environ ×1,5 de débit.
+// width/height undefined = "native" : on capture l'écran à sa vraie résolution.
+const RESOLUTIONS = {
+  native: { width: undefined, height: undefined, bitrate: { 30: 14_000_000, 60: 20_000_000 } },
+  "1440": { width: 2560, height: 1440, bitrate: { 30: 9_000_000, 60: 14_000_000 } },
+  "1080": { width: 1920, height: 1080, bitrate: { 30: 6_000_000, 60: 9_000_000 } },
+  "720": { width: 1280, height: 720, bitrate: { 30: 3_000_000, 60: 4_500_000 } },
+  "480": { width: 854, height: 480, bitrate: { 30: 1_500_000, 60: 2_200_000 } },
+  "360": { width: 640, height: 360, bitrate: { 30: 800_000, 60: 1_200_000 } },
 } as const;
-type QualityKey = keyof typeof QUALITY;
+type ResolutionKey = keyof typeof RESOLUTIONS;
+type Fps = 30 | 60;
+
+const isResolutionKey = (value: string): value is ResolutionKey => value in RESOLUTIONS;
+const isFps = (value: number): value is Fps => value === 30 || value === 60;
+
+/** Réglages complets d'encodage à partir des deux menus. */
+function streamQuality(resolution: ResolutionKey, fps: Fps) {
+  const r = RESOLUTIONS[resolution];
+  return {
+    width: r.width,
+    height: r.height,
+    fps,
+    bitrate: r.bitrate[fps],
+    // hint "detail" : quand le réseau sature, Chrome baisse les fps mais GARDE la résolution.
+    // ("motion" ferait l'inverse : il retomberait en 360p/540p, justement ce qu'on veut éviter.)
+    hint: "detail",
+  } as const;
+}
+
+// Qualités qu'un spectateur peut demander. null = "max" : on garde les réglages du streamer.
+// Le streamer plafonne toujours : on ne dépasse jamais SA résolution ni SON débit.
+const VIEWER_PRESETS: Record<ViewerQuality, { height: number; bitrate: number } | null> = {
+  max: null,
+  "1080p": { height: 1080, bitrate: 8_000_000 },
+  "720p": { height: 720, bitrate: 4_000_000 },
+  "480p": { height: 480, bitrate: 1_500_000 },
+  "360p": { height: 360, bitrate: 800_000 },
+};
+
+const isViewerQuality = (value: string): value is ViewerQuality => value in VIEWER_PRESETS;
 
 // Explication affichée sous le lien, selon qui pourra l'ouvrir.
 // Record<ShareReach, string> : TypeScript exige un texte pour CHAQUE cas possible.
@@ -37,6 +70,23 @@ function setStatus(text: string, isError = false) {
   const el = $("status");
   el.textContent = text;
   el.classList.toggle("error", isError);
+}
+
+// Préférences retenues par le navigateur (localStorage). Le stockage peut être bloqué
+// (navigation privée, cookies refusés) : dans ce cas on ignore l'erreur et on prend la valeur par défaut.
+function loadPref(key: string): string | null {
+  try {
+    return localStorage.getItem(`umastream.${key}`);
+  } catch {
+    return null;
+  }
+}
+function savePref(key: string, value: string) {
+  try {
+    localStorage.setItem(`umastream.${key}`, value);
+  } catch {
+    /* stockage indisponible : le choix ne sera juste pas retenu */
+  }
 }
 
 /** Ouvre la connexion WebSocket et traite les messages UN PAR UN, dans l'ordre. */
@@ -61,10 +111,23 @@ function connect(onMessage: (msg: ServerMessage) => Promise<void> | void) {
 function startStreamerMode() {
   $("streamer-view").hidden = false;
   const startBtn = $<HTMLButtonElement>("start-btn");
-  const qualitySelect = $<HTMLSelectElement>("quality");
+  const resolutionSelect = $<HTMLSelectElement>("resolution");
+  const fpsSelect = $<HTMLSelectElement>("fps");
+
+  // Les menus reprennent le dernier choix (sinon 1080p / 60, sélectionnés dans le HTML).
+  // On vérifie la valeur retenue : une ancienne valeur ou une valeur bricolée est ignorée.
+  const storedResolution = loadPref("streamResolution");
+  if (storedResolution && isResolutionKey(storedResolution)) resolutionSelect.value = storedResolution;
+  const storedFps = Number(loadPref("streamFps"));
+  if (isFps(storedFps)) fpsSelect.value = String(storedFps);
+
+  resolutionSelect.addEventListener("change", () => savePref("streamResolution", resolutionSelect.value));
+  fpsSelect.addEventListener("change", () => savePref("streamFps", fpsSelect.value));
 
   startBtn.addEventListener("click", async () => {
-    const quality = QUALITY[qualitySelect.value as QualityKey];
+    const resolution = isResolutionKey(resolutionSelect.value) ? resolutionSelect.value : "1080";
+    const fps = Number(fpsSelect.value);
+    const quality = streamQuality(resolution, isFps(fps) ? fps : 60);
 
     // 1. Capture de l'écran (le navigateur affiche sa fenêtre de choix)
     let stream: MediaStream;
@@ -90,11 +153,32 @@ function startStreamerMode() {
     preview.srcObject = stream;
     preview.hidden = false;
     startBtn.disabled = true;
-    qualitySelect.disabled = true;
+    resolutionSelect.disabled = true;
+    fpsSelect.disabled = true;
 
     // 2. Connexion au serveur de signalisation
     const peerConnections = new Map<string, RTCPeerConnection>(); // une par spectateur
     const updateCount = () => ($("viewer-count").textContent = String(peerConnections.size));
+
+    /**
+     * Applique la qualité demandée par UN spectateur, sur SA connexion uniquement.
+     * setParameters() change l'encodage à chaud : pas de renégociation, pas de coupure.
+     */
+    const applyViewerQuality = async (pc: RTCPeerConnection, preset: ViewerQuality) => {
+      const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+      if (!sender) return;
+      const params = sender.getParameters();
+      const encoding = params.encodings[0];
+      if (!encoding) return; // pas encore négocié
+
+      const target = VIEWER_PRESETS[preset];
+      const sourceHeight = videoTrack.getSettings().height ?? 1080;
+      // scaleResolutionDownBy = "divise la résolution par…" : 1080 / 720 = 1,5 -> 720p.
+      // Math.max(1, …) : on ne grossit jamais l'image au-delà de ce que capture le streamer.
+      encoding.scaleResolutionDownBy = target ? Math.max(1, sourceHeight / target.height) : 1;
+      encoding.maxBitrate = target ? Math.min(quality.bitrate, target.bitrate) : quality.bitrate;
+      await sender.setParameters(params);
+    };
 
     const { ws, send } = connect(async (msg) => {
       switch (msg.type) {
@@ -143,7 +227,9 @@ function startStreamerMode() {
 
         case "signal": {
           const pc = peerConnections.get(msg.from);
-          if (pc) await applySignal(pc, msg.data);
+          if (!pc) break;
+          if (msg.data.kind === "quality") await applyViewerQuality(pc, msg.data.preset);
+          else await applySignal(pc, msg.data);
           break;
         }
 
@@ -185,8 +271,15 @@ function startStreamerMode() {
 
 function startViewerMode(roomId: string) {
   $("viewer-view").hidden = false;
+  $("viewer-options").hidden = false; // le bouton ⚙️ du header ne sert qu'au spectateur
   const video = $<HTMLVideoElement>("remote");
   let pc: RTCPeerConnection | null = null;
+
+  // Qualité choisie : celle retenue par le navigateur, sinon "max"
+  const storedQuality = loadPref("quality") ?? "max";
+  let viewerQuality: ViewerQuality = isViewerQuality(storedQuality) ? storedQuality : "max";
+  const qualitySelect = $<HTMLSelectElement>("viewer-quality");
+  qualitySelect.value = viewerQuality;
 
   setStatus("Connexion au salon…");
 
@@ -219,6 +312,9 @@ function startViewerMode(roomId: string) {
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           send({ type: "signal", to: "streamer", data: { kind: "answer", sdp: answer.sdp! } });
+          // Juste après la réponse : on annonce la qualité voulue (le streamer l'applique
+          // dès qu'il a traité la réponse, les messages arrivant dans l'ordre)
+          send({ type: "signal", to: "streamer", data: { kind: "quality", preset: viewerQuality } });
           startStats(pc);
         } else if (pc) {
           await applySignal(pc, msg.data);
@@ -246,7 +342,39 @@ function startViewerMode(roomId: string) {
     video.muted = !video.muted;
     $("unmute-btn").textContent = video.muted ? "🔊 Activer le son" : "🔇 Couper le son";
   });
-  $("fullscreen-btn").addEventListener("click", () => video.requestFullscreen());
+  // Plein écran sur le bloc vidéo + stats (et non la seule <video>), pour garder les stats visibles
+  $("fullscreen-btn").addEventListener("click", () => $("video-wrap").requestFullscreen());
+
+  // --- Panneau ⚙️ Options ---
+  const optionsBtn = $("options-btn");
+  const optionsPanel = $("options-panel");
+  const setPanelOpen = (open: boolean) => {
+    optionsPanel.hidden = !open;
+    optionsBtn.setAttribute("aria-expanded", String(open));
+  };
+  // hidden peut valoir true, false ou "until-found" : tout sauf false = panneau fermé -> on l'ouvre
+  optionsBtn.addEventListener("click", () => setPanelOpen(optionsPanel.hidden !== false));
+  // Un clic ailleurs sur la page referme le panneau
+  document.addEventListener("click", (e) => {
+    if (!optionsPanel.hidden && !(e.target as Element).closest(".options")) setPanelOpen(false);
+  });
+
+  // Changement de qualité : on le retient et on prévient le streamer tout de suite
+  qualitySelect.addEventListener("change", () => {
+    if (!isViewerQuality(qualitySelect.value)) return;
+    viewerQuality = qualitySelect.value;
+    savePref("quality", viewerQuality);
+    if (pc) send({ type: "signal", to: "streamer", data: { kind: "quality", preset: viewerQuality } });
+  });
+
+  // Afficher / masquer les stats (masquées par défaut)
+  const showStats = $<HTMLInputElement>("show-stats");
+  showStats.checked = loadPref("showStats") === "true";
+  $("stats").hidden = !showStats.checked;
+  showStats.addEventListener("change", () => {
+    $("stats").hidden = !showStats.checked;
+    savePref("showStats", String(showStats.checked));
+  });
 }
 
 /** Affiche la résolution, les fps et le débit reçus : la preuve qu'on dépasse le 720p ! */
