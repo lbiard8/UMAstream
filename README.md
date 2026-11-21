@@ -21,8 +21,6 @@ Deux façons de streamer :
 |---|---|---|
 | Installation | Un installateur, rien d'autre | Node.js + cloudflared + le projet |
 | **Son par application** (ex. : tout sauf Discord) | ✅ (Windows 11) | ❌ (tout le son du PC, ou un onglet) |
-| Barre « … partage votre écran » de Chrome | ❌ Aucune | ✅ Toujours affichée |
-| Fenêtre de terminal | ❌ Aucune | ✅ Ouverte pendant l'utilisation |
 
 ### A. L'application UMAstream (recommandée)
 
@@ -36,7 +34,6 @@ Le tunnel (cloudflared) est inclus dans l'application : il n'y a rien d'autre à
 **2. Double-clic sur l'installateur.** Il n'est pas signé, Windows affiche donc un écran bleu
 « **Windows a protégé votre ordinateur** » :
 1. clique sur le lien **Informations complémentaires** (sous le texte) ;
-2. clique sur le bouton **Exécuter quand même** qui apparaît en bas.
 
 Cet avertissement n'apparaît qu'à l'installation, pas à chaque lancement.
 
@@ -68,8 +65,6 @@ C'est prêt : tu peux [streamer ton écran](#streamer-ton-écran).
 >   (tes réglages sont conservés).
 > - **Tester sans installer** : `release\win-unpacked\UMAstream.exe` lance l'appli directement depuis le projet.
 > - **Désinstaller** : Paramètres Windows → **Applications** → **UMAstream** → Désinstaller.
-> - Si tu avais l'ancienne icône « UMAstream » de la version navigateur, l'installateur la remplace par celle
->   de l'application. Pour retrouver la version navigateur : `npm run shortcut` (icône « UMAstream (navigateur) »).
 
 ### B. La version navigateur (moins fonctionnelle)
 
@@ -148,7 +143,7 @@ Pour le donner à d'autres, tu peux le publier dans les **Releases** de ton dép
      panneau **🔊 Son du stream** (voir ci-dessous) ;
    - **version navigateur** : choisis dans la fenêtre de Chrome. Pour le son, coche « Partager l'audio »
      (écran entier ou onglet seulement : c'est alors tout le son du PC, Discord compris).
-4. Clique sur **Copier le lien** et envoie-le à tes potes. Vérifie que la note sous le lien est verte
+4. Clique sur **Copier le lien** et envoie-le à tes potes. Vérifie que la note sous le lien est
    (« 🌍 Lien accessible depuis n'importe où »).
 5. Envoie le **mot de passe à part** (en vocal, en message privé), jamais avec le lien.
 6. Quand quelqu'un demande à entrer, il apparaît à droite dans **⏳ En attente** : clique sur ✅ pour l'accepter.
@@ -212,7 +207,7 @@ Pense à le faire quand tu ne streames pas.
 ### Bon à savoir
 
 - **Tes spectateurs acceptés peuvent voir ton adresse IP** (la vidéo passe en direct entre vos PC) :
-  ne partage le lien qu'avec des personnes de confiance.
+  !!! ne partage le lien qu'avec des personnes de confiance !!!
 - **Le lien change à chaque lancement** de l'appli : renvoie-le à chaque fois.
 - **Environ 2 à 4 spectateurs en 1080p**, selon ta connexion montante.
 - **Attention à ce que tu montres** : notifications, mots de passe, e-mails… Partage une fenêtre plutôt que
