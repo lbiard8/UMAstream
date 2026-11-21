@@ -10,6 +10,10 @@
 </head>
 <body>
   <header>
+    <!-- Application de bureau uniquement : lien vers la version navigateur (affiché par main.ts) -->
+    <button id="browser-version-btn" class="browser-version" hidden>
+      🌐 Aller sur la version navigateur (moins fonctionnelle)
+    </button>
     <!-- alt="" : le logo est décoratif, le titre "UMAstream" est déjà lu par les lecteurs d'écran -->
     <h1>UMA<span>stream</span></h1>
     <p class="tagline">Partage ton écran en vraie qualité, sans compte, sans installation.</p>
@@ -53,6 +57,32 @@
         <label for="stream-password">Mot de passe</label>
         <input id="stream-password" type="password" maxlength="128" autocomplete="new-password" required />
         <button id="start-btn" class="primary">Partager mon écran</button>
+      </div>
+
+      <!-- Application de bureau uniquement : son par application (rempli par client/app-audio.ts) -->
+      <div id="audio-panel" class="card audio-panel" hidden>
+        <div class="audio-header">
+          <h2>🔊 Son du stream</h2>
+          <span id="audio-summary" class="audio-summary"></span>
+          <button id="audio-toggle" type="button" aria-expanded="false" aria-controls="audio-body">▸ Agrandir</button>
+        </div>
+        <!-- Contenu du panneau : réduit par défaut (bouton ci-dessus), le choix est retenu -->
+        <div id="audio-body" class="audio-body" hidden>
+        <p class="reach">
+          Coche les applications à envoyer à tes spectateurs. Ces réglages ne changent que le stream,
+          pas ce que tu entends. Les applis de vocal (Discord…) sont décochées pour éviter l'écho.
+        </p>
+        <p id="audio-unsupported" class="privacy" hidden>
+          Le son par application demande Windows 11 : le stream partira sans son.
+        </p>
+        <div class="audio-master">
+          <label for="audio-master">Volume général</label>
+          <input id="audio-master" type="range" min="0" max="100" value="100" />
+          <span id="audio-master-value" class="audio-value">100 %</span>
+        </div>
+        <ul id="audio-list" class="audio-list"></ul>
+        <p id="audio-empty" class="people-empty">Aucune application ne joue de son pour l'instant.</p>
+        </div>
       </div>
 
       <div id="live-panel" class="card" hidden>
@@ -123,6 +153,16 @@
 
     <p id="status" class="status"></p>
   </main>
+
+  <!-- Application de bureau uniquement : notre fenêtre de choix d'écran (remplie par client/app-picker.ts) -->
+  <dialog id="source-picker" class="source-picker">
+    <h2>Que veux-tu partager ?</h2>
+    <h3>Écrans</h3>
+    <div id="picker-screens" class="picker-grid"></div>
+    <h3>Fenêtres</h3>
+    <div id="picker-windows" class="picker-grid"></div>
+    <div class="picker-actions"><button id="picker-cancel" type="button">Annuler</button></div>
+  </dialog>
 
   <script type="module" src="app.js"></script>
 </body>

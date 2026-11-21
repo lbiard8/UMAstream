@@ -1,0 +1,11 @@
+[package]
+name = "umastream-audio"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde_json = "1.0.154"
+sysinfo = "0.38.4"
+wasapi = "0.27"
+# Même version que celle utilisée par wasapi : liste et réouverture des fenêtres réduites
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm"] }

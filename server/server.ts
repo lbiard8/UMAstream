@@ -30,7 +30,10 @@ import {
 
 const PORT = Number(process.env.PORT ?? 3000);
 // `npm run share` ajoute --tunnel : on crée alors une adresse publique via Cloudflare
-const WANT_TUNNEL = process.argv.includes("--tunnel");
+// (l'application de bureau, elle, passe par la variable d'environnement UMASTREAM_TUNNEL=1)
+const WANT_TUNNEL = process.argv.includes("--tunnel") || process.env.UMASTREAM_TUNNEL === "1";
+// Lancé par l'application de bureau (Electron) : pas de process.exit(), on signale plutôt les erreurs
+const EMBEDDED = process.env.UMASTREAM_EMBEDDED === "1";
 // `--open` (ajouté par le lanceur UMAstream.cmd) : ouvrir la page dans le navigateur une fois prêt
 const WANT_OPEN = process.argv.includes("--open");
 const LOCAL_URL = `http://localhost:${PORT}`;
@@ -58,7 +61,18 @@ function shareInfo(): { shareBase?: string; reach: ShareReach } {
   if (lanIp) return { shareBase: `http://${lanIp}:${PORT}`, reach: "lan" };
   return { reach: "local" };
 }
-const PUBLIC_DIR = fileURLToPath(new URL("../public/", import.meta.url));
+// Dossier des fichiers du site. L'application de bureau indique le sien (il est dans l'appli installée).
+const PUBLIC_DIR = process.env.UMASTREAM_PUBLIC_DIR
+  ? join(process.env.UMASTREAM_PUBLIC_DIR, sep)
+  : fileURLToPath(new URL("../public/", import.meta.url));
+
+/** Résolu quand le serveur écoute (et que le tunnel est prêt ou a échoué). Utilisé par l'appli de bureau. */
+let markReady!: (info: { port: number; tunnelUrl: string | null }) => void;
+let markFailed!: (err: Error) => void;
+export const serverReady = new Promise<{ port: number; tunnelUrl: string | null }>((resolve, reject) => {
+  markReady = resolve;
+  markFailed = reject;
+});
 
 // ---------------------------------------------------------------------------
 // 1. Fichiers statiques (main-page.html, app.js, style.css)
@@ -421,6 +435,7 @@ function handleDisconnect(ws: WebSocket) {
 // ouvert). Au lieu de planter, on ouvre la page existante et on s'arrête proprement.
 // (Le serveur WebSocket fait remonter les erreurs du serveur HTTP : c'est donc lui qu'on écoute.)
 wss.on("error", (err: NodeJS.ErrnoException) => {
+  if (EMBEDDED) return markFailed(err); // l'appli de bureau affiche elle-même le problème
   if (err.code === "EADDRINUSE") {
     console.log(`UMAstream tourne déjà sur le port ${PORT} : ouverture de la page existante.`);
     if (WANT_OPEN) openBrowser(LOCAL_URL);
@@ -444,5 +459,6 @@ httpServer.listen(PORT, async () => {
 
   // Après le tunnel : ainsi, le lien généré dans la page utilise déjà l'adresse internet
   if (WANT_OPEN) openBrowser(LOCAL_URL);
-  console.log("\nPour arrêter UMAstream : ferme cette fenêtre (ou Ctrl+C).");
+  if (!EMBEDDED) console.log("\nPour arrêter UMAstream : ferme cette fenêtre (ou Ctrl+C).");
+  markReady({ port: PORT, tunnelUrl });
 });

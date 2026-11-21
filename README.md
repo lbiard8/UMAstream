@@ -1,8 +1,8 @@
 # UMAstream
 
-Partage ton écran en haute qualité (jusqu'à la résolution native de l'écran, 60 fps) directement dans le
-navigateur, via WebRTC. Pas de compte : tu lances l'appli sur ton PC, tu envoies le lien et le mot de passe,
-tes potes regardent.
+Partage ton écran en haute qualité (jusqu'à la résolution native de l'écran, 60 fps), via WebRTC, depuis
+l'application UMAstream pour Windows ou directement depuis le navigateur. Pas de compte : tu lances l'appli sur
+ton PC, tu envoies le lien et le mot de passe, tes potes regardent dans leur navigateur.
 
 1. [Installation](#1-installation) : à faire une seule fois par PC
 2. [Utilisation](#2-utilisation) : streamer, regarder, arrêter
@@ -14,6 +14,64 @@ tes potes regardent.
 
 À faire **une seule fois** sur chaque PC qui veut streamer (Windows).
 Pour **regarder** un stream, il n'y a rien à installer : un navigateur suffit.
+
+Deux façons de streamer :
+
+| | Application UMAstream (recommandée) | Version navigateur |
+|---|---|---|
+| Installation | Un installateur, rien d'autre | Node.js + cloudflared + le projet |
+| **Son par application** (ex. : tout sauf Discord) | ✅ (Windows 11) | ❌ (tout le son du PC, ou un onglet) |
+| Barre « … partage votre écran » de Chrome | ❌ Aucune | ✅ Toujours affichée |
+| Fenêtre de terminal | ❌ Aucune | ✅ Ouverte pendant l'utilisation |
+
+### A. L'application UMAstream (recommandée)
+
+Le tunnel (cloudflared) est inclus dans l'application : il n'y a rien d'autre à installer.
+
+**1. Trouver l'installateur `UMAstream Setup 0.1.0.exe`**
+- si tu l'as fabriqué toi-même : il est dans le dossier **`release\`** du projet
+  (voir [Fabriquer l'installateur](#fabriquer-linstallateur)) ;
+- sinon : télécharge-le depuis la page **Releases** du dépôt GitHub (si quelqu'un l'y a publié).
+
+**2. Double-clic sur l'installateur.** Il n'est pas signé, Windows affiche donc un écran bleu
+« **Windows a protégé votre ordinateur** » :
+1. clique sur le lien **Informations complémentaires** (sous le texte) ;
+2. clique sur le bouton **Exécuter quand même** qui apparaît en bas.
+
+Cet avertissement n'apparaît qu'à l'installation, pas à chaque lancement.
+
+**3. Suivre l'assistant d'installation**
+1. **Pour qui installer** :
+   - **Uniquement pour moi** (conseillé) : pas besoin de droits administrateur, l'appli va dans
+     `%LOCALAPPDATA%\Programs\UMAstream` ;
+   - **Pour tous les utilisateurs** : Windows demande l'autorisation administrateur, l'appli va dans
+     `C:\Program Files\UMAstream`.
+2. **Dossier d'installation** : garde celui proposé, ou choisis-en un autre.
+3. **Installer**, puis **Terminer**. Si la case **Lancer UMAstream** est cochée, l'appli démarre tout de suite.
+
+Une icône **UMAstream** est créée sur le **bureau** et dans le **menu Démarrer**.
+
+**4. Premier lancement**
+1. La fenêtre s'ouvre sur « Démarrage d'UMAstream… », puis la page s'affiche (quelques secondes, le temps
+   d'ouvrir le lien internet).
+2. Windows peut afficher « **Le Pare-feu Windows Defender a bloqué certaines fonctionnalités de cette
+   application** » (UMAstream fait tourner un petit serveur). Coche **Réseaux privés**, puis clique sur
+   **Autoriser l'accès**. Ce message n'apparaît qu'une fois.
+   - Le lien internet (tunnel) fonctionne même sans autoriser les **réseaux publics** (Wi-Fi d'université,
+     de gare…). Les autoriser n'est utile que pour le lien « réseau local », et expose le serveur aux autres
+     appareils de ce réseau public : mieux vaut ne pas le faire.
+
+C'est prêt : tu peux [streamer ton écran](#streamer-ton-écran).
+
+> **Bon à savoir**
+> - **Mettre à jour** : ferme UMAstream, puis relance le nouvel installateur : il remplace l'ancienne version
+>   (tes réglages sont conservés).
+> - **Tester sans installer** : `release\win-unpacked\UMAstream.exe` lance l'appli directement depuis le projet.
+> - **Désinstaller** : Paramètres Windows → **Applications** → **UMAstream** → Désinstaller.
+> - Si tu avais l'ancienne icône « UMAstream » de la version navigateur, l'installateur la remplace par celle
+>   de l'application. Pour retrouver la version navigateur : `npm run shortcut` (icône « UMAstream (navigateur) »).
+
+### B. La version navigateur (moins fonctionnelle)
 
 **1. Installer Node.js** : télécharge la version **LTS** sur https://nodejs.org et installe-la avec les options
 par défaut.
@@ -39,7 +97,8 @@ cd UMAstream
 npm run shortcut
 ```
 
-C'est tout. Au premier lancement, l'icône installe d'elle-même ce qui manque (environ une minute).
+Une icône **UMAstream (navigateur)** apparaît sur le bureau. Au premier lancement, elle installe d'elle-même ce
+qui manque (environ une minute).
 
 > **Pièges possibles**
 > - Projet téléchargé en ZIP : au premier double-clic, Windows peut afficher « Windows a protégé votre
@@ -47,23 +106,48 @@ C'est tout. Au premier lancement, l'icône installe d'elle-même ce qui manque (
 > - cloudflared installé alors qu'un terminal était ouvert : ferme et rouvre le terminal.
 > - Dossier du projet déplacé : relance `npm run shortcut`.
 
+### Fabriquer l'installateur
+
+Pour créer `UMAstream Setup x.y.z.exe` à partir du projet (une fois, sur ton PC de développement) :
+
+1. Installer **Node.js**, **Rust** (https://rustup.rs) et les **outils C++ de Visual Studio**
+   (« Développement Desktop en C++ », nécessaires à Rust sous Windows).
+2. Dans le dossier du projet :
+
+```powershell
+npm install
+npm run dist
+```
+
+L'installateur est créé dans `release\`. `npm run dist` compile tout (page, application, programme audio),
+télécharge `cloudflared.exe` (vérifié : signé par Cloudflare) puis assemble l'installateur.
+Pour le donner à d'autres, tu peux le publier dans les **Releases** de ton dépôt GitHub.
+
 ---
 
 ## 2. Utilisation
 
 ### Lancer l'appli
 
-**Double-clic sur l'icône UMAstream** du bureau. Le navigateur s'ouvre sur `http://localhost:3000` une fois le
-lien internet prêt. Une fenêtre de terminal s'ouvre aussi, réduite dans la barre des tâches.
-
-> Tu peux aussi double-cliquer sur `UMAstream.cmd`, à la racine du projet : c'est la même chose.
+- **Application** : double-clic sur l'icône **UMAstream**. La fenêtre s'ouvre tout de suite sur « Démarrage
+  d'UMAstream… », puis la page s'affiche une fois le lien internet prêt (quelques secondes). Relancer l'icône
+  alors qu'elle est ouverte ramène simplement la fenêtre au premier plan.
+  En haut à gauche, **🌐 Aller sur la version navigateur** ouvre la même page dans ton navigateur.
+- **Version navigateur** : double-clic sur **UMAstream (navigateur)**. Le navigateur s'ouvre sur
+  `http://localhost:3000` ; une fenêtre de terminal s'ouvre aussi, réduite dans la barre des tâches
+  (`UMAstream.cmd`, à la racine du projet, fait la même chose).
 
 ### Streamer ton écran
 
 1. Choisis la **résolution** et les **fps** (1080p / 60 par défaut).
 2. Choisis un **mot de passe** (obligatoire).
-3. Clique sur **Partager mon écran** et choisis ce que tu partages (écran entier, fenêtre ou onglet).
-   Pour partager le son, coche « Partager l'audio » dans la fenêtre de Chrome (écran entier ou onglet seulement).
+3. Clique sur **Partager mon écran** et choisis ce que tu partages :
+   - **application** : choisis un écran ou une fenêtre parmi les miniatures. Les fenêtres **réduites** dans la
+     barre des tâches apparaissent avec leur icône et la mention « réduite » : UMAstream les rouvre (sans les passer
+     devant) pour les partager, car Windows ne peut pas capturer une fenêtre réduite. Le son se règle dans le
+     panneau **🔊 Son du stream** (voir ci-dessous) ;
+   - **version navigateur** : choisis dans la fenêtre de Chrome. Pour le son, coche « Partager l'audio »
+     (écran entier ou onglet seulement : c'est alors tout le son du PC, Discord compris).
 4. Clique sur **Copier le lien** et envoie-le à tes potes. Vérifie que la note sous le lien est verte
    (« 🌍 Lien accessible depuis n'importe où »).
 5. Envoie le **mot de passe à part** (en vocal, en message privé), jamais avec le lien.
@@ -75,7 +159,7 @@ lien internet prêt. Une fenêtre de terminal s'ouvre aussi, réduite dans la ba
 |---|---|
 | Menus **Résolution / Fps** | Changent la qualité en direct, sans couper |
 | **⏸ Pause** / **▶ Reprendre** | Fige l'image chez les spectateurs, sans les déconnecter |
-| **🔄 Changer d'écran** | Passe à un autre écran, une autre fenêtre ou un autre onglet, sans couper |
+| **🔄 Changer d'écran** | Passe à un autre écran ou une autre fenêtre (ou un onglet, dans la version navigateur), sans couper |
 | **🔧 Diagnostic** | Affiche ce que l'encodeur envoie vraiment (utile si ça saccade) |
 | **Arrêter le partage** | Termine le stream |
 
@@ -88,17 +172,41 @@ Dans le panneau de droite (sous le reste sur petit écran) :
 | 👥 Spectateurs | 👢 | L'expulser (il peut refaire une demande) |
 | | ☐ Accepter automatiquement | Toute personne qui a le bon mot de passe entre directement |
 
+### Le son du stream (application, Windows 11)
+
+Le panneau **🔊 Son du stream** liste les applications qui ont du son (comme le mélangeur de volume de Windows).
+Il est **réduit par défaut** : son en-tête affiche un résumé (« 2 applis envoyées sur 4 ») et le bouton
+**▸ Agrandir / ▾ Réduire** l'ouvre ou le ferme (le choix est retenu).
+
+| Élément | Effet |
+|---|---|
+| ☑ Case | Envoyer (ou non) le son de cette application à tes spectateurs |
+| Barre verte | Le son que produit l'application en ce moment |
+| Curseur | Son volume **dans le stream** |
+| Volume général | Le volume de tout le son du stream |
+
+- **Ces réglages ne touchent que le stream** : ce que tu entends toi-même ne change pas.
+- **Les applis de vocal** (Discord, Teams, TeamSpeak, Zoom…, marquées 🎙️ vocal) sont **décochées par défaut** :
+  si tu es en vocal avec tes spectateurs, ils ne s'entendent pas en écho dans le stream.
+- Une application lancée pendant le stream apparaît toute seule (cochée, sauf si c'est une appli de vocal).
+- Tes choix (case, volume) sont retenus pour chaque application.
+- Une application n'apparaît que si elle a une session audio : **Chrome, par exemple, n'est listé que lorsqu'il
+  joue (ou vient de jouer) du son**. Lance ta vidéo, il apparaît dans les 2 secondes.
+
 ### Regarder un stream
 
 1. Ouvre le lien reçu (ordinateur ou téléphone).
 2. Tape ton **pseudo** et le **mot de passe**, puis attends que le streamer t'accepte.
-3. Clique sur **🔊 Activer le son** (les navigateurs démarrent les vidéos en muet).
+3. **Le son est activé d'office** : le clic sur « Rejoindre » suffit au navigateur pour l'autoriser. Le bouton
+   **🔇 Couper le son** le coupe (et **🔊 Activer le son** le remet, si un navigateur strict l'a refusé au départ).
 4. **⚙️ Options**, en haut à droite : choisis ta **qualité** (baisse-la si ta connexion rame) et affiche les
-   **stats** si tu veux voir la résolution, les fps et le débit reçus.
+   **stats** si tu veux voir la résolution, les fps et le débit reçus (image, et son en 🔊 kb/s).
 
 ### Arrêter l'appli
 
-**Ferme la fenêtre du terminal** (ou `Ctrl + C` dedans). Le serveur et le tunnel s'arrêtent ensemble.
+- **Application** : **ferme sa fenêtre**. Le stream, le serveur, le tunnel et la capture du son s'arrêtent ensemble.
+- **Version navigateur** : **ferme la fenêtre du terminal** (ou `Ctrl + C` dedans).
+
 Pense à le faire quand tu ne streames pas.
 
 ### Bon à savoir
@@ -110,6 +218,8 @@ Pense à le faire quand tu ne streames pas.
 - **Attention à ce que tu montres** : notifications, mots de passe, e-mails… Partage une fenêtre plutôt que
   l'écran entier, active « Ne pas déranger » dans Windows, et utilise ⏸ Pause avant d'ouvrir quelque chose de privé.
 - Sur certains réseaux très fermés (école, entreprise, certaines 4G), la vidéo peut ne pas passer.
+- Le son par application demande **Windows 11** (ou Windows 10 build 20348+). Sur un Windows plus ancien,
+  l'application fonctionne, mais le stream part sans son (le panneau l'indique).
 
 ---
 
@@ -123,15 +233,48 @@ Pense à le faire quand tu ne streames pas.
 3. Les deux navigateurs s'échangent offre, réponse et candidats ICE **via le serveur**.
 4. Ensuite la vidéo passe **en direct** entre les navigateurs (pair à pair). Le serveur ne voit jamais la vidéo.
 
+### L'application de bureau
+
+L'application (Electron) fait tourner **le même serveur** que `npm run share`, puis affiche **la même page** dans
+sa propre fenêtre. Les spectateurs, eux, restent dans leur navigateur. Elle ajoute deux choses :
+
+- **Sa propre fenêtre de choix d'écran** : Electron n'a pas celle de Chrome. La page affiche des miniatures
+  (`desktopCapturer`), puis `getDisplayMedia()` capture la source choisie (`setDisplayMediaRequestHandler`).
+  Windows ne capture pas une fenêtre réduite, et `desktopCapturer` ne les propose donc pas : `umastream-audio.exe
+  windows` liste les fenêtres réduites de la barre des tâches (affichées avec l'icône de leur programme), et
+  `umastream-audio.exe restore <hwnd>` rouvre celle qu'on choisit sans lui donner le focus. L'appli attend
+  ensuite qu'elle apparaisse dans les sources d'Electron (`window:<hwnd>:…`) pour la capturer.
+- **Le son par application**, grâce à `umastream-audio.exe` (`native/audio-helper`, en Rust). Windows sait
+  capturer le son d'**un programme et de ses sous-processus** (« process loopback », Windows 11) : chaque
+  application cochée a sa propre capture, et la page mélange le tout :
+
+```
+umastream-audio.exe capture <pid>   ->  son brut (48 kHz, stéréo, flottants)  ->  processus principal Electron
+  ->  page : lecteur AudioWorklet (public/pcm-worklet.js)  ->  volume de l'appli  ->  volume général
+  ->  piste audio du stream (MediaStreamAudioDestinationNode)  ->  WebRTC
+```
+
+- La page ne parle à Electron qu'à travers `window.umastreamApp` (`shared/app-bridge.ts`, `electron/preload.ts`),
+  avec `contextIsolation` et `sandbox` : elle n'a aucun autre accès au PC.
+- Le port est choisi automatiquement (3000, ou le suivant s'il est déjà pris, par exemple par la version navigateur).
+- Une seule instance à la fois. Fermer la fenêtre arrête tout (serveur, tunnel, captures audio).
+- Le son du stream (application **et** version navigateur) part en **Opus stéréo à 128 kb/s** : WebRTC règle
+  Opus pour la voix par défaut (mono, ~32 kb/s), on modifie donc le SDP des deux côtés (`highQualityOpus`).
+
 ### Commandes
 
 | Commande | Rôle |
 |---|---|
-| `npm run share` | Compile le client puis lance le serveur sur le port 3000, avec un tunnel Cloudflare (lien valable partout). C'est ce que lance l'icône |
+| `npm run app` | Compile tout et lance l'application de bureau (développement) |
+| `npm run dist` | Compile tout, télécharge cloudflared et fabrique l'installateur dans `release\` |
+| `npm run build:app` | Compile l'application Electron dans `dist/` (`scripts/build-app.mjs`) |
+| `npm run build:audio` | Compile `umastream-audio.exe` (Rust) |
+| `npm run fetch:cloudflared` | Télécharge `vendor/cloudflared.exe` et vérifie sa signature Cloudflare |
+| `npm run share` | Version navigateur : compile le client puis lance le serveur sur le port 3000, avec un tunnel Cloudflare (lien valable partout). C'est ce que lance l'icône « UMAstream (navigateur) » |
 | `npm run dev` | Pareil sans tunnel (lien valable sur ton réseau local) |
 | `npm run build:client` | Compile `client/main.ts` en `public/app.js` (esbuild) |
 | `npm run typecheck` | Vérifie les types de tout le projet (TypeScript) |
-| `npm run shortcut` | Crée l'icône UMAstream sur le bureau (Windows) |
+| `npm run shortcut` | Crée l'icône « UMAstream (navigateur) » sur le bureau (Windows) |
 | `npm run icon` | Régénère `assets/umastream.ico` à partir de `public/logo.png` (si tu changes de logo) |
 
 Le lanceur `UMAstream.cmd` vérifie que Node est installé, lance `npm install` si `node_modules` manque, puis
@@ -149,8 +292,9 @@ Le serveur choisit donc lui-même la meilleure adresse pour le lien généré :
 | `npm run dev` | `http://<ton IP locale>:3000/?room=…` | 🏠 Les PC sur le même réseau (box, Wi-Fi) |
 | Pas de réseau | `http://localhost:3000/?room=…` | 💻 Ce PC seulement |
 
-- L'adresse publique s'affiche dans le terminal (`Internet : https://…`). Le tunnel est gratuit et sans compte,
-  mais **son adresse change à chaque lancement**.
+- L'adresse publique est utilisée pour le lien affiché dans la page (et, dans la version navigateur, s'affiche
+  aussi dans le terminal : `Internet : https://…`). Le tunnel est gratuit et sans compte, mais **son adresse
+  change à chaque lancement**.
 - Le tunnel ne transporte que la page et la signalisation : la vidéo continue de passer en direct entre les PC.
 - Sur certains réseaux (Wi-Fi d'université, réseau d'entreprise), les PC ne peuvent pas se joindre entre eux :
   le lien « réseau local » ne marchera pas, utilise `npm run share`.
@@ -259,8 +403,8 @@ spectateur en découle :
 - **Pause** : `sender.replaceTrack(null)` arrête l'envoi de l'image et du son (presque plus de bande passante),
   puis `replaceTrack(piste)` le relance. La connexion WebRTC reste ouverte et les spectateurs voient la dernière
   image figée avec un bandeau « ⏸ Stream en pause ».
-- Pendant la pause, la capture continue sur ton PC (la barre « … partage votre écran » de Chrome reste affichée) :
-  c'est ce qui permet de reprendre sans rechoisir l'écran. Un spectateur qui arrive pendant la pause voit le
+- Pendant la pause, la capture continue sur ton PC (dans la version navigateur, la barre « … partage votre écran »
+  de Chrome reste donc affichée) : c'est ce qui permet de reprendre sans rechoisir l'écran. Un spectateur qui arrive pendant la pause voit le
   bandeau et reçoit l'image à la reprise. « Changer d'écran » et les changements de qualité pendant la pause sont
   pris en compte à la reprise.
 
@@ -272,12 +416,21 @@ server/server.ts     Serveur HTTP (fichiers du site) + signalisation WebSocket
 server/network.ts    Adresses joignables par les autres PC : IP locale et tunnel Cloudflare
 server/password.ts   Accès aux salons : hachage scrypt, limite d'essais par IP, délai après un refus
 server/limits.ts     Plafonds anti-abus : connexions par IP et au total, demandes par minute
-client/main.ts       Code navigateur : mode streamer et mode spectateur
-public/              main-page.html (servie sur "/"), style.css, logo.png, app.js (généré)
-assets/umastream.ico Icône du raccourci, générée à partir de public/logo.png
-scripts/             make-icon.ps1 (génère l'icône), create-shortcut.ps1 (crée le raccourci)
-UMAstream.cmd        Lanceur : dépendances + serveur + tunnel + navigateur, en un double-clic
+shared/app-bridge.ts Ce que l'application ajoute à la page (window.umastreamApp)
+client/main.ts       Code de la page : mode streamer et mode spectateur
+client/app-audio.ts  Application : panneau « Son du stream » et mélangeur
+client/app-picker.ts Application : fenêtre de choix d'écran (miniatures)
+electron/main.ts     Application : processus principal (fenêtre, serveur intégré, choix d'écran, captures audio)
+electron/preload.ts  Application : le pont entre la page et Electron
+native/audio-helper/ umastream-audio.exe (Rust) : applis audio, capture du son d'une appli, fenêtres réduites
+public/              main-page.html (servie sur "/"), style.css, logo.png, pcm-worklet.js, app.js (généré)
+assets/umastream.ico Icône de l'application et des raccourcis, générée à partir de public/logo.png
+scripts/             build-app.mjs (compile l'appli), fetch-cloudflared.ps1, make-icon.ps1, create-shortcut.ps1
+UMAstream.cmd        Lanceur de la version navigateur : dépendances + serveur + tunnel + navigateur
 ```
+
+Dossiers générés (ignorés par git) : `dist/` (appli compilée), `release/` (installateur),
+`native/audio-helper/target/` (programme Rust compilé), `vendor/` (cloudflared.exe téléchargé).
 
 ### Limites actuelles
 
@@ -289,4 +442,8 @@ UMAstream.cmd        Lanceur : dépendances + serveur + tunnel + navigateur, en 
   en 1080p).
 - Pas de serveur TURN : sur certains réseaux très fermés (4G, réseau d'école…), la connexion directe peut échouer.
 - Ton PC doit rester allumé avec l'appli lancée pendant le stream, et l'adresse du tunnel change à chaque lancement.
-- L'icône du bureau et le lanceur ne fonctionnent que sous Windows (ailleurs : `npm install` puis `npm run share`).
+- L'application, l'icône du bureau et le lanceur ne fonctionnent que sous Windows (ailleurs : `npm install` puis
+  `npm run share`, version navigateur).
+- Le son par application demande Windows 11 (ou Windows 10 build 20348+).
+- L'installateur n'est pas signé (une signature coûte plusieurs centaines d'euros par an) : Windows affiche un
+  avertissement à l'installation.
