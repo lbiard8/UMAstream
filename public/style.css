@@ -152,5 +152,51 @@ header { position: relative; }
 .people button { padding: 4px 8px; font-size: 1rem; line-height: 1; }
 .people-empty { margin: 0; color: var(--muted); font-size: 0.85rem; }
 
+/* --- Application de bureau --- */
+
+/* Lien vers la version navigateur, en haut à gauche de la page */
+.browser-version { position: absolute; top: 16px; left: 16px; font-size: 0.85rem; }
+@media (max-width: 600px) {
+  header:has(.browser-version:not([hidden])) { padding-top: 68px; }
+}
+
+/* Panneau "Son du stream" */
+.audio-panel { flex-direction: column; align-items: stretch; }
+.audio-panel h2 { margin: 0; font-size: 1rem; }
+.audio-header { display: flex; align-items: center; gap: 12px; }
+.audio-summary { flex: 1; color: var(--muted); font-size: 0.85rem; }
+.audio-body { display: flex; flex-direction: column; gap: 12px; }
+.audio-panel .reach, .audio-panel .privacy { margin: 0; }
+.audio-master { display: flex; align-items: center; gap: 10px; }
+.audio-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.audio-list li {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) 90px 120px 44px 18px;
+  align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; background: #222631;
+}
+.audio-list li.is-off { opacity: 0.55; }
+.audio-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audio-tag { font-size: 0.75rem; color: var(--muted); }
+.audio-value { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; text-align: right; }
+.audio-meter { height: 6px; border-radius: 3px; background: #15181f; overflow: hidden; }
+.audio-meter > span { display: block; height: 100%; width: 0; background: #3dd68c; transition: width 0.1s linear; }
+input[type="range"] { padding: 0; accent-color: var(--accent); }
+
+/* Fenêtre de choix d'écran */
+.source-picker {
+  width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 64px);
+  background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px;
+}
+.source-picker::backdrop { background: rgba(0, 0, 0, 0.6); }
+.source-picker h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.source-picker h3 { margin: 12px 0 8px; font-size: 0.9rem; color: var(--muted); }
+.picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.picker-tile { display: flex; flex-direction: column; gap: 6px; padding: 8px; text-align: left; }
+.picker-tile img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #000; border-radius: 6px; }
+.picker-tile span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+.picker-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+/* Fenêtre réduite : l'icône du programme, centrée et en petit, à la place de l'aperçu */
+.picker-tile.is-minimized img { object-fit: none; background: #15181f; }
+.picker-badge { font-size: 0.75rem; color: var(--muted); }
+
 .status { color: var(--muted); text-align: center; }
 .status.error { color: var(--danger); }

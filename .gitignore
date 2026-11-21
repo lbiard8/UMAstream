@@ -1,3 +1,9 @@
 node_modules/
+# Fichiers générés par la compilation de l'application de bureau
+dist/
+release/
+native/audio-helper/target/
+# cloudflared.exe téléchargé pour l'installateur (npm run fetch:cloudflared)
+vendor/
 public/app.js
 public/app.js.map

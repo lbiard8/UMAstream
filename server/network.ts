@@ -34,13 +34,26 @@ export function getLanIp(): Promise<string | null> {
  * (https://xxxx.trycloudflare.com). Gratuit, sans compte, HTTPS automatique.
  * Renvoie null si cloudflared n'est pas installé ou ne répond pas.
  */
+/** Le tunnel en cours, pour pouvoir l'arrêter (l'application de bureau l'arrête en quittant). */
+let tunnelProcess: ChildProcess | null = null;
+
+export function stopTunnel() {
+  tunnelProcess?.kill();
+  tunnelProcess = null;
+}
+
 export function startTunnel(port: number): Promise<string | null> {
   return new Promise((resolve) => {
     let child: ChildProcess;
+    // L'application de bureau fournit son propre cloudflared.exe (UMASTREAM_CLOUDFLARED) ;
+    // sinon on utilise celui installé sur le PC (winget).
+    const command = process.env.UMASTREAM_CLOUDFLARED || "cloudflared";
     try {
-      child = spawn("cloudflared", ["tunnel", "--url", `http://localhost:${port}`, "--no-autoupdate"], {
+      child = spawn(command, ["tunnel", "--url", `http://localhost:${port}`, "--no-autoupdate"], {
         stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true, // pas de fenêtre noire qui s'ouvre pour cloudflared
       });
+      tunnelProcess = child;
     } catch {
       return resolve(null);
     }
@@ -72,9 +85,11 @@ export function startTunnel(port: number): Promise<string | null> {
     });
 
     // Quand le serveur s'arrête (Ctrl+C), on arrête aussi le tunnel
-    const stop = () => child.kill();
-    process.on("exit", stop);
-    process.on("SIGINT", () => process.exit());
-    process.on("SIGTERM", () => process.exit());
+    process.on("exit", stopTunnel);
+    if (!process.env.UMASTREAM_EMBEDDED) {
+      // En ligne de commande seulement : dans l'appli de bureau, c'est Electron qui gère la fermeture
+      process.on("SIGINT", () => process.exit());
+      process.on("SIGTERM", () => process.exit());
+    }
   });
 }

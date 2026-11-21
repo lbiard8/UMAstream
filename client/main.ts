@@ -10,6 +10,12 @@ import {
   type SignalData,
   type ViewerQuality,
 } from "../shared/messages.js";
+import { StreamAudioMixer } from "./app-audio.js";
+import { pickScreenSource } from "./app-picker.js";
+
+// Présent seulement dans l'application de bureau (voir shared/app-bridge.ts et electron/preload.ts).
+// Dans le navigateur, il vaut undefined et la page fonctionne comme avant.
+const desktopApp = window.umastreamApp;
 
 // Serveur STUN public : il aide chaque navigateur à découvrir son adresse publique
 // pour traverser la box. (Pour les réseaux très fermés il faudra un serveur TURN : V2.)
@@ -152,6 +158,56 @@ function startStreamerMode() {
     );
   }
 
+  // --- Application de bureau : lien vers la version navigateur + son par application ---
+  let mixer: StreamAudioMixer | null = null;
+  if (desktopApp) {
+    const browserBtn = $("browser-version-btn");
+    browserBtn.hidden = false;
+    browserBtn.addEventListener("click", () => void desktopApp.openInBrowser());
+
+    const audioPanel = $("audio-panel");
+    audioPanel.hidden = false;
+
+    // Bouton Réduire / Agrandir : réduit par défaut, le choix est retenu
+    const audioBody = $("audio-body");
+    const audioToggle = $("audio-toggle");
+    const setAudioExpanded = (expanded: boolean) => {
+      audioBody.hidden = !expanded;
+      audioToggle.textContent = expanded ? "▾ Réduire" : "▸ Agrandir";
+      audioToggle.setAttribute("aria-expanded", String(expanded));
+      savePref("audioExpanded", String(expanded));
+    };
+    setAudioExpanded(loadPref("audioExpanded") === "true");
+    audioToggle.addEventListener("click", () => setAudioExpanded(audioBody.hidden !== false));
+
+    // Résumé visible même panneau réduit : "2 applis envoyées sur 4"
+    const audioSummary = $("audio-summary");
+    const updateAudioSummary = () => {
+      if (!mixer) return;
+      const { sent, total } = mixer.summary();
+      audioSummary.textContent =
+        total === 0 ? "aucune appli ne joue de son" : `${sent} appli${sent > 1 ? "s" : ""} envoyée${sent > 1 ? "s" : ""} sur ${total}`;
+    };
+
+    void (async () => {
+      const unsupported = () => {
+        $("audio-unsupported").hidden = false;
+        audioPanel.querySelector<HTMLElement>(".audio-master")!.hidden = true;
+        $("audio-empty").hidden = true;
+        audioSummary.textContent = "indisponible sur ce Windows";
+      };
+      if (!(await desktopApp.audioSupported())) return unsupported();
+      try {
+        mixer = await StreamAudioMixer.create(desktopApp, audioPanel);
+        mixer.onChange = updateAudioSummary;
+        updateAudioSummary();
+      } catch (err) {
+        console.error(err);
+        unsupported();
+      }
+    })();
+  }
+
   startBtn.addEventListener("click", async () => {
     // Mot de passe obligatoire : on vérifie AVANT d'ouvrir la fenêtre de choix d'écran.
     // (Le serveur revérifie de son côté : on ne fait jamais confiance au seul navigateur.)
@@ -165,18 +221,35 @@ function startStreamerMode() {
     // `let` : la qualité peut changer pendant le stream (menus Résolution / Fps)
     let quality = selectedQuality();
 
-    /** Ouvre la fenêtre de choix d'écran du navigateur (au démarrage, puis à chaque "Changer d'écran"). */
+    /** Ouvre la fenêtre de choix d'écran (au démarrage, puis à chaque "Changer d'écran"). */
     const captureScreen = async () => {
+      // Appli de bureau : notre propre fenêtre de choix (Electron n'a pas celle de Chrome)
+      if (desktopApp) {
+        const sourceId = await pickScreenSource(desktopApp);
+        if (!sourceId) throw new Error("Partage annulé");
+        try {
+          await desktopApp.selectScreenSource(sourceId); // rouvre d'abord une fenêtre réduite
+        } catch (err) {
+          // Message utile (ex. fenêtre impossible à rouvrir) plutôt qu'un simple "annulé"
+          throw new ShareError(err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(err));
+        }
+      }
       const captured = await navigator.mediaDevices.getDisplayMedia({
         video: {
           width: quality.width && { ideal: quality.width },
           height: quality.height && { ideal: quality.height },
           frameRate: { ideal: quality.fps },
         },
-        audio: true, // son du PC : marche avec Chrome/Edge en partageant l'écran entier ou un onglet
+        // Navigateur : son du PC (écran entier ou onglet). Appli : le son vient du mélangeur (par application).
+        audio: !desktopApp,
       });
       // Indice pour l'encodeur : "motion" = garder les fps, "detail" = garder la netteté
       captured.getVideoTracks()[0]!.contentHint = quality.hint;
+      // Une COPIE de la piste du mélangeur : arrêter l'ancienne capture (changer d'écran, arrêter)
+      // n'arrête que la copie, le mélangeur continue.
+      if (mixer) captured.addTrack(mixer.track.clone());
+      // Indice pour l'encodeur Opus : musique / son de jeu, pas une voix
+      for (const track of captured.getAudioTracks()) track.contentHint = "music";
       return captured;
     };
 
@@ -185,8 +258,8 @@ function startStreamerMode() {
     let stream: MediaStream;
     try {
       stream = await captureScreen();
-    } catch {
-      setStatus("Partage annulé.");
+    } catch (err) {
+      setStatus(err instanceof ShareError ? err.message : "Partage annulé.", err instanceof ShareError);
       return;
     }
     let videoTrack = stream.getVideoTracks()[0]!;
@@ -316,11 +389,16 @@ function startStreamerMode() {
           // replaceTrack() ne peut remplir qu'un emplacement qui existe déjà : sans ça, passer d'une
           // fenêtre muette à un onglet avec du son obligerait à renégocier la connexion.
           const audioTrack = stream.getAudioTracks()[0];
-          pc.addTransceiver(!paused && audioTrack ? audioTrack : "audio", { direction: "sendonly", streams: [outStream] });
+          pc.addTransceiver(!paused && audioTrack ? audioTrack : "audio", {
+            direction: "sendonly",
+            streams: [outStream],
+            sendEncodings: [{ maxBitrate: AUDIO_BITRATE }], // son haute qualité (voir highQualityOpus)
+          });
 
           const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          send({ type: "signal", to: msg.viewerId, data: { kind: "offer", sdp: offer.sdp! } });
+          const offerSdp = highQualityOpus(offer.sdp!);
+          await pc.setLocalDescription({ type: "offer", sdp: offerSdp });
+          send({ type: "signal", to: msg.viewerId, data: { kind: "offer", sdp: offerSdp } });
           // Arrivé pendant une pause : on le lui dit tout de suite (sinon il attendrait l'image sans savoir pourquoi)
           if (paused) send({ type: "signal", to: msg.viewerId, data: { kind: "pause", paused: true } });
           break;
@@ -376,8 +454,13 @@ function startStreamerMode() {
         let newStream: MediaStream;
         try {
           newStream = await captureScreen();
-        } catch {
-          setStatus("Changement annulé : l'écran actuel continue.");
+        } catch (err) {
+          setStatus(
+            err instanceof ShareError
+              ? `${err.message} L'écran actuel continue.`
+              : "Changement annulé : l'écran actuel continue.",
+            err instanceof ShareError,
+          );
           return;
         }
 
@@ -537,7 +620,8 @@ function startStreamerMode() {
       $("pending-count").textContent = String(pendingRequests.size);
       $("watching-count").textContent = String(viewerNames.size);
       // "Personne pour l'instant" sous une liste vide
-      for (const empty of document.querySelectorAll<HTMLElement>(".people-empty")) {
+      // [data-for] : seulement les textes liés à une liste (le panneau du son réutilise la classe)
+      for (const empty of document.querySelectorAll<HTMLElement>(".people-empty[data-for]")) {
         empty.hidden = $(empty.dataset.for!).childElementCount > 0;
       }
     }
@@ -579,6 +663,7 @@ function startStreamerDiagnostics(peerConnections: Map<string, RTCPeerConnection
     string,
     { bytes: number; time: number; encoded: number; encodeTime: number; captured: number }
   >();
+  const lastAudio = new Map<string, { bytes: number; time: number }>();
 
   // Bouton 🔧 Diagnostic : affiche / masque la zone (masquée par défaut)
   const diagBtn = $("diag-btn");
@@ -656,6 +741,19 @@ function startStreamerDiagnostics(peerConnections: Map<string, RTCPeerConnection
         `  Codec : ${codec}` +
           (out.encoderImplementation ? ` · encodeur : ${out.encoderImplementation} (${hardware})` : ""),
       );
+
+      // Le son : débit envoyé, et mono / stéréo (le codec Opus annonce son nombre de canaux)
+      const audioOut = stats.find((s) => s.type === "outbound-rtp" && s.kind === "audio");
+      if (audioOut) {
+        const prevAudio = lastAudio.get(viewerId);
+        lastAudio.set(viewerId, { bytes: audioOut.bytesSent ?? 0, time: audioOut.timestamp });
+        const kbps = prevAudio
+          ? (((audioOut.bytesSent ?? 0) - prevAudio.bytes) * 8) / (audioOut.timestamp - prevAudio.time)
+          : 0;
+        const audioCodec = stats.find((s) => s.id === audioOut.codecId);
+        const channels = audioCodec?.channels === 2 ? "stéréo" : audioCodec?.channels === 1 ? "mono" : "?";
+        lines.push(`  Son : ${Math.round(kbps)} kb/s · ${audioCodec?.mimeType?.replace("audio/", "") ?? "?"} ${channels}`);
+      }
     }
     $("streamer-stats").textContent = lines.join("\n");
   }, 1000);
@@ -765,7 +863,10 @@ function startViewerMode(roomId: string) {
             }
           };
           pc.ontrack = (e) => {
-            video.srcObject = e.streams[0]!;
+            if (video.srcObject !== e.streams[0]) {
+              video.srcObject = e.streams[0]!;
+              void playWithSound(); // une seule fois : l'image et le son arrivent dans le même flux
+            }
             setStatus("");
           };
           pc.onconnectionstatechange = () => {
@@ -776,8 +877,10 @@ function startViewerMode(roomId: string) {
 
           await pc.setRemoteDescription({ type: "offer", sdp: msg.data.sdp });
           const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          send({ type: "signal", to: "streamer", data: { kind: "answer", sdp: answer.sdp! } });
+          // Le spectateur indique lui aussi qu'il accepte la stéréo haute qualité (sinon : mono)
+          const answerSdp = highQualityOpus(answer.sdp!);
+          await pc.setLocalDescription({ type: "answer", sdp: answerSdp });
+          send({ type: "signal", to: "streamer", data: { kind: "answer", sdp: answerSdp } });
           // Juste après la réponse : on annonce la qualité voulue (le streamer l'applique
           // dès qu'il a traité la réponse, les messages arrivant dans l'ordre)
           send({ type: "signal", to: "streamer", data: { kind: "quality", preset: viewerQuality } });
@@ -829,11 +932,26 @@ function startViewerMode(roomId: string) {
     send({ type: "join-room", roomId, password: passwordInput.value, name });
   });
 
-  // Les navigateurs bloquent la lecture automatique AVEC son : on démarre muet,
-  // et l'utilisateur clique pour activer le son.
+  // Le son est activé dès l'arrivée du stream. Les navigateurs refusent normalement la lecture AVEC
+  // son tant que la personne n'a pas interagi avec la page… mais le spectateur a déjà cliqué sur
+  // « Rejoindre » (ou appuyé sur Entrée) : ce geste suffit pour que le navigateur l'autorise.
+  const syncMuteButton = () => {
+    $("unmute-btn").textContent = video.muted ? "🔊 Activer le son" : "🔇 Couper le son";
+  };
+  const playWithSound = async () => {
+    video.muted = false;
+    try {
+      await video.play();
+    } catch {
+      // Refusé quand même (navigateur strict) : on lance l'image en muet, le bouton activera le son
+      video.muted = true;
+      await video.play().catch(() => {});
+    }
+    syncMuteButton();
+  };
   $("unmute-btn").addEventListener("click", () => {
     video.muted = !video.muted;
-    $("unmute-btn").textContent = video.muted ? "🔊 Activer le son" : "🔇 Couper le son";
+    syncMuteButton();
   });
   // Plein écran sur le bloc vidéo + stats (et non la seule <video>), pour garder les stats visibles
   $("fullscreen-btn").addEventListener("click", () => $("video-wrap").requestFullscreen());
@@ -872,25 +990,72 @@ function startViewerMode(roomId: string) {
 
 /** Affiche la résolution, les fps et le débit reçus : la preuve qu'on dépasse le 720p ! */
 function startStats(pc: RTCPeerConnection) {
-  let lastBytes = 0;
-  let lastTime = 0;
+  // Débit = (octets reçus maintenant - octets reçus la fois d'avant) / temps écoulé, pour l'image et le son
+  const last = { video: { bytes: 0, time: 0 }, audio: { bytes: 0, time: 0 } };
+  const rate = (kind: "video" | "audio", bytes: number, time: number) => {
+    const prev = last[kind];
+    const bitsPerMs = prev.time ? ((bytes - prev.bytes) * 8) / (time - prev.time) : 0;
+    last[kind] = { bytes, time };
+    return bitsPerMs * 1000; // bits par seconde
+  };
   const timer = setInterval(async () => {
     if (pc.connectionState === "closed") return clearInterval(timer);
     const report = await pc.getStats();
+    let videoText = "";
+    let audioKbps = 0;
     report.forEach((s) => {
-      if (s.type !== "inbound-rtp" || s.kind !== "video") return;
-      const mbps = lastTime ? ((s.bytesReceived - lastBytes) * 8) / ((s.timestamp - lastTime) * 1000) : 0;
-      lastBytes = s.bytesReceived;
-      lastTime = s.timestamp;
-      if (s.frameWidth) {
-        $("stats").textContent =
-          `${s.frameWidth}×${s.frameHeight} · ${Math.round(s.framesPerSecond ?? 0)} fps · ${mbps.toFixed(1)} Mb/s`;
+      if (s.type !== "inbound-rtp") return;
+      if (s.kind === "audio") {
+        audioKbps = rate("audio", s.bytesReceived, s.timestamp) / 1000;
+      } else if (s.kind === "video") {
+        const mbps = rate("video", s.bytesReceived, s.timestamp) / 1e6;
+        if (s.frameWidth) {
+          videoText = `${s.frameWidth}×${s.frameHeight} · ${Math.round(s.framesPerSecond ?? 0)} fps · ${mbps.toFixed(1)} Mb/s`;
+        }
       }
     });
+    if (videoText) $("stats").textContent = `${videoText} · 🔊 ${Math.round(audioKbps)} kb/s`;
   }, 1000);
 }
 
 // --- Commun ------------------------------------------------------------------
+
+/** Erreur à montrer telle quelle à l'utilisateur (son message est déjà en français et explicite). */
+class ShareError extends Error {}
+
+/** Débit du son du stream : 128 kb/s, de quoi garder la musique et le son des jeux en bonne qualité. */
+const AUDIO_BITRATE = 128_000;
+
+/**
+ * Son stéréo haute qualité. Par défaut, WebRTC règle le codec Opus pour la VOIX : mono, environ
+ * 32 kb/s. On modifie la description de la session (le SDP, un texte que les deux navigateurs
+ * s'échangent) pour demander la stéréo et 128 kb/s. Il faut le faire des deux côtés : le streamer
+ * dans son offre, le spectateur dans sa réponse.
+ */
+function highQualityOpus(sdp: string): string {
+  const rtpmap = sdp.match(/a=rtpmap:(\d+) opus\/48000\/2/i);
+  if (!rtpmap) return sdp; // pas d'Opus : on ne touche à rien
+  const payload = rtpmap[1];
+  const wanted: Record<string, string> = {
+    stereo: "1",
+    "sprop-stereo": "1",
+    maxaveragebitrate: String(AUDIO_BITRATE),
+  };
+  const fmtp = new RegExp(`a=fmtp:${payload} ([^\\r\\n]*)`);
+  const existing = sdp.match(fmtp);
+  if (!existing) return sdp.replace(rtpmap[0], `${rtpmap[0]}\r\na=fmtp:${payload} ${toParams(wanted)}`);
+  // On garde les paramètres déjà présents (ex. useinbandfec=1) et on ajoute / remplace les nôtres
+  const params: Record<string, string> = {};
+  for (const part of existing[1]!.split(";")) {
+    const [key, value] = part.split("=");
+    if (key) params[key.trim()] = (value ?? "").trim();
+  }
+  return sdp.replace(fmtp, `a=fmtp:${payload} ${toParams({ ...params, ...wanted })}`);
+}
+const toParams = (params: Record<string, string>) =>
+  Object.entries(params)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(";");
 
 async function applySignal(pc: RTCPeerConnection, data: SignalData) {
   if (data.kind === "answer") {
