@@ -19,17 +19,22 @@ Deux façons de streamer :
 
 | | Application UMAstream (recommandée) | Version navigateur |
 |---|---|---|
-| Installation | Un installateur, rien d'autre | Node.js + cloudflared + le projet |
+| Installation | Un installateur à [télécharger](https://github.com/lbiard8/UMAstream/releases/latest), rien d'autre | Node.js + cloudflared + le projet |
 | **Son par application** (ex. : tout sauf Discord) | ✅ (Windows 11) | ❌ (tout le son du PC, ou un onglet) |
 
 ### A. L'application UMAstream (recommandée)
 
 Le tunnel (cloudflared) est inclus dans l'application : il n'y a rien d'autre à installer.
 
-**1. Trouver l'installateur `UMAstream Setup 0.1.0.exe`**
-- si tu l'as fabriqué toi-même : il est dans le dossier **`release\`** du projet
-  (voir [Fabriquer l'installateur](#fabriquer-linstallateur)) ;
-- sinon : télécharge-le depuis la page **Releases** du dépôt GitHub (si quelqu'un l'y a publié).
+**1. Télécharger l'installateur**
+
+👉 **https://github.com/lbiard8/UMAstream/releases/latest**
+
+Dans la partie **Assets**, clique sur **`UMAstream.Setup.0.1.0.exe`** (environ 130 Mo). Pas besoin de cloner le
+dépôt ni d'installer Node.js : l'installateur contient tout.
+
+> Si tu as fabriqué l'installateur toi-même ([voir plus bas](#fabriquer-linstallateur)), il est dans le dossier
+> **`release\`** du projet, sous le nom `UMAstream Setup 0.1.0.exe`.
 
 **2. Double-clic sur l'installateur.** Il n'est pas signé, Windows affiche donc un écran bleu
 « **Windows a protégé votre ordinateur** » :
@@ -61,8 +66,9 @@ Une icône **UMAstream** est créée sur le **bureau** et dans le **menu Démarr
 C'est prêt : tu peux [streamer ton écran](#streamer-ton-écran).
 
 > **Bon à savoir**
-> - **Mettre à jour** : ferme UMAstream, puis relance le nouvel installateur : il remplace l'ancienne version
->   (tes réglages sont conservés).
+> - **Mettre à jour** : ferme UMAstream, télécharge le nouvel installateur sur la
+>   [page des versions](https://github.com/lbiard8/UMAstream/releases/latest) et lance-le : il remplace
+>   l'ancienne version (tes réglages sont conservés).
 > - **Tester sans installer** : `release\win-unpacked\UMAstream.exe` lance l'appli directement depuis le projet.
 > - **Désinstaller** : Paramètres Windows → **Applications** → **UMAstream** → Désinstaller.
 
@@ -116,7 +122,20 @@ npm run dist
 
 L'installateur est créé dans `release\`. `npm run dist` compile tout (page, application, programme audio),
 télécharge `cloudflared.exe` (vérifié : signé par Cloudflare) puis assemble l'installateur.
-Pour le donner à d'autres, tu peux le publier dans les **Releases** de ton dépôt GitHub.
+
+**Publier une nouvelle version** (pour que les autres la téléchargent) :
+1. Change `"version"` dans `package.json` (ex. `0.2.0`), puis lance `npm run dist`.
+2. Sur GitHub : **Releases → Draft a new release**, tag `v0.2.0`, et glisse
+   `release\UMAstream Setup 0.2.0.exe` dans **Attach binaries** (GitHub remplace les espaces par des points
+   dans le nom du fichier).
+3. **Publish release**. Le lien [`releases/latest`](https://github.com/lbiard8/UMAstream/releases/latest) pointe
+   alors automatiquement vers cette nouvelle version.
+
+Ou en une commande, avec GitHub CLI :
+
+```powershell
+gh release create v0.2.0 "release\UMAstream Setup 0.2.0.exe" --title "UMAstream 0.2.0" --notes "…"
+```
 
 ---
 
