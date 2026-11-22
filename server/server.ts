@@ -9,7 +9,13 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { WebSocketServer, WebSocket } from "ws";
-import { MAX_NAME_LENGTH, type ClientMessage, type ServerMessage, type ShareReach } from "../shared/messages.js";
+import {
+  MAX_NAME_LENGTH,
+  RESUME_GRACE_SECONDS,
+  type ClientMessage,
+  type ServerMessage,
+  type ShareReach,
+} from "../shared/messages.js";
 import { getLanIp, startTunnel } from "./network.js";
 import {
   ConnectionCounter,
@@ -119,6 +125,10 @@ interface Room {
   // Salle d'attente : bon mot de passe, mais pas encore accepté par le streamer
   pending: Map<string, { ws: WebSocket; name: string }>;
   password: PasswordHash; // empreinte du mot de passe, jamais le mot de passe en clair
+  // Jetons de reprise : jeton secret -> viewerId (donné au spectateur quand il est accepté)
+  resumeTokens: Map<string, string>;
+  // Spectateurs déconnectés qu'on garde le temps qu'ils se reconnectent : viewerId -> minuteur
+  graceTimers: Map<string, NodeJS.Timeout>;
 }
 
 /** Ce qu'on sait de chaque connexion. */
@@ -193,6 +203,26 @@ function send(ws: WebSocket, msg: ServerMessage) {
 const MAX_MESSAGE_BYTES = 64 * 1024;
 const wss = new WebSocketServer({ server: httpServer, maxPayload: MAX_MESSAGE_BYTES });
 
+// --- Maintien des connexions ("ping") ----------------------------------------------
+// Une connexion qui ne transporte plus rien est coupée par les relais : le tunnel Cloudflare coupe
+// un WebSocket inactif au bout d'environ 2 minutes (mesuré : 125 s). Une fois la vidéo lancée, la
+// connexion d'un spectateur avec le serveur ne sert presque plus… et il était éjecté (issue #23).
+// Toutes les 30 s, le serveur envoie donc un "ping" à chaque connexion ; le navigateur répond tout
+// seul par un "pong". Une connexion qui n'a pas répondu au ping précédent est morte : on la ferme.
+const PING_INTERVAL_MS = 30_000;
+const answeredLastPing = new WeakMap<WebSocket, boolean>();
+const keepAlive = setInterval(() => {
+  for (const client of wss.clients) {
+    if (answeredLastPing.get(client) === false) {
+      client.terminate(); // pas de réponse depuis 30 s : connexion morte
+      continue;
+    }
+    answeredLastPing.set(client, false);
+    client.ping();
+  }
+}, PING_INTERVAL_MS);
+wss.on("close", () => clearInterval(keepAlive));
+
 wss.on("connection", (ws, req) => {
   const ip = clientIp(req);
   ipOf.set(ws, ip);
@@ -221,6 +251,9 @@ wss.on("connection", (ws, req) => {
   ws.once("close", () => connectionsByIp.remove(ip)); // compté une fois, décompté une fois
 
   if (isFromThisPc(req)) localConnections.add(ws);
+
+  answeredLastPing.set(ws, true);
+  ws.on("pong", () => answeredLastPing.set(ws, true));
 
   ws.on("message", (raw) => {
     let msg: ClientMessage;
@@ -263,7 +296,14 @@ async function handleMessage(ws: WebSocket, msg: ClientMessage) {
         const password = await hashPassword(msg.password);
         if (ws.readyState !== WebSocket.OPEN) return; // le streamer est parti pendant le hachage
         const roomId = newId();
-        rooms.set(roomId, { streamer: ws, viewers: new Map(), pending: new Map(), password });
+        rooms.set(roomId, {
+          streamer: ws,
+          viewers: new Map(),
+          pending: new Map(),
+          password,
+          resumeTokens: new Map(),
+          graceTimers: new Map(),
+        });
         peers.set(ws, { id: "streamer", roomId, role: "streamer" });
         send(ws, { type: "room-created", roomId, ...shareInfo() });
         console.log(`[salon ${roomId}] créé`);
@@ -364,19 +404,52 @@ async function handleMessage(ws: WebSocket, msg: ClientMessage) {
 
       room.viewers.set(msg.viewerId, request.ws);
       peers.set(request.ws, { id: msg.viewerId, roomId: me.roomId, role: "viewer" });
-      send(request.ws, { type: "joined", roomId: me.roomId });
+      // Jeton secret (128 bits, impossible à deviner) : il permettra au spectateur de se reconnecter
+      // si sa connexion au serveur se coupe, sans retaper le mot de passe ni repasser par l'attente
+      const resumeToken = randomBytes(16).toString("hex");
+      room.resumeTokens.set(resumeToken, msg.viewerId);
+      send(request.ws, { type: "joined", roomId: me.roomId, resumeToken });
       // C'est SEULEMENT maintenant que le streamer lance la connexion WebRTC
       send(ws, { type: "viewer-joined", viewerId: msg.viewerId, name: request.name });
       console.log(`[salon ${me.roomId}] ${request.name} accepté (${room.viewers.size} spectateur(s))`);
       break;
     }
 
+    case "resume": {
+      // Spectateur déjà accepté qui revient après une coupure de sa connexion au serveur
+      if (me || pendingOf.has(ws)) return;
+      const ip = ipOf.get(ws) ?? "inconnue";
+      if (!joinRateLimiter.tryConsume(ip)) {
+        return send(ws, { type: "error", message: "Trop de tentatives, attends une minute." });
+      }
+      const room = rooms.get(msg.roomId);
+      const viewerId = typeof msg.resumeToken === "string" ? room?.resumeTokens.get(msg.resumeToken) : undefined;
+      if (!room || !viewerId) return send(ws, { type: "resume-failed" }); // trop tard, ou stream terminé
+
+      // Il retrouve sa place : on annule son départ programmé, et sa nouvelle connexion remplace l'ancienne
+      clearTimeout(room.graceTimers.get(viewerId));
+      room.graceTimers.delete(viewerId);
+      const old = room.viewers.get(viewerId);
+      room.viewers.set(viewerId, ws);
+      peers.set(ws, { id: viewerId, roomId: msg.roomId, role: "viewer" });
+      if (old && old !== ws) {
+        peers.delete(old); // sa fermeture ne doit plus rien déclencher
+        old.terminate();
+      }
+      send(ws, { type: "resumed" });
+      console.log(`[salon ${msg.roomId}] spectateur ${viewerId} reconnecté`);
+      break;
+    }
+
     case "kick": {
       if (me?.role !== "streamer") return;
-      const viewer = rooms.get(me.roomId)?.viewers.get(msg.viewerId);
-      if (!viewer) return;
+      const room = rooms.get(me.roomId);
+      const viewer = room?.viewers.get(msg.viewerId);
+      if (!room || !viewer) return;
       send(viewer, { type: "kicked" });
-      // La fermeture déclenche handleDisconnect, qui prévient le streamer (viewer-left)
+      // Expulsion immédiate et définitive : pas de période de grâce, et son jeton de reprise est annulé
+      peers.delete(viewer);
+      removeViewer(room, me.roomId, msg.viewerId);
       viewer.close();
       console.log(`[salon ${me.roomId}] spectateur ${msg.viewerId} expulsé`);
       break;
@@ -422,13 +495,34 @@ function handleDisconnect(ws: WebSocket) {
       send(waitingWs, { type: "stream-ended" });
       pendingOf.delete(waitingWs);
     }
+    for (const timer of room.graceTimers.values()) clearTimeout(timer);
     rooms.delete(me.roomId);
     console.log(`[salon ${me.roomId}] fermé`);
   } else {
-    room.viewers.delete(me.id);
-    send(room.streamer, { type: "viewer-left", viewerId: me.id });
-    console.log(`[salon ${me.roomId}] spectateur ${me.id} parti`);
+    // Une nouvelle connexion l'a déjà remplacé (il s'est reconnecté) : rien à faire
+    if (room.viewers.get(me.id) !== ws) return;
+    // Sa connexion au SERVEUR s'est coupée, mais sa vidéo (en direct avec le streamer) passe peut-être
+    // encore : on le garde 30 s, le temps qu'il se reconnecte tout seul avec son jeton ("resume").
+    const roomId = me.roomId;
+    const viewerId = me.id;
+    room.graceTimers.set(
+      viewerId,
+      setTimeout(() => {
+        removeViewer(room, roomId, viewerId);
+        console.log(`[salon ${roomId}] spectateur ${viewerId} parti (pas revenu en ${RESUME_GRACE_SECONDS} s)`);
+      }, RESUME_GRACE_SECONDS * 1000),
+    );
+    console.log(`[salon ${roomId}] spectateur ${viewerId} déconnecté : on l'attend ${RESUME_GRACE_SECONDS} s`);
   }
+}
+
+/** Retire définitivement un spectateur du salon, et prévient le streamer. */
+function removeViewer(room: Room, roomId: string, viewerId: string) {
+  clearTimeout(room.graceTimers.get(viewerId));
+  room.graceTimers.delete(viewerId);
+  if (!room.viewers.delete(viewerId)) return; // déjà retiré
+  for (const [token, id] of room.resumeTokens) if (id === viewerId) room.resumeTokens.delete(token);
+  if (rooms.get(roomId) === room) send(room.streamer, { type: "viewer-left", viewerId });
 }
 
 // Port déjà utilisé : le plus souvent, UMAstream tourne déjà (double-clic sur l'icône alors qu'il est

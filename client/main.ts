@@ -294,6 +294,24 @@ function startStreamerMode() {
      * rien n'est envoyé si le stream est en pause OU si ce spectateur est rendu aveugle.
      * replaceTrack(null) coupe l'envoi sans fermer la connexion, replaceTrack(piste) le relance.
      */
+    /**
+     * Relance la connexion vidéo d'un spectateur sans la recréer ("ICE restart") : une nouvelle offre
+     * avec iceRestart: true fait rechercher aux deux navigateurs un nouveau chemin réseau entre eux,
+     * sur la MÊME connexion (pistes, qualité, pause… sont conservées).
+     */
+    const lastIceRestart = new WeakMap<RTCPeerConnection, number>();
+    const restartIce = async (viewerId: string, pc: RTCPeerConnection) => {
+      if (pc.connectionState === "closed" || pc.signalingState !== "stable") return; // négociation déjà en cours
+      const now = Date.now();
+      if (now - (lastIceRestart.get(pc) ?? 0) < 3000) return; // pas plus d'une relance toutes les 3 s
+      lastIceRestart.set(pc, now);
+      console.log(`Relance de la connexion vidéo du spectateur ${viewerId} (état : ${pc.connectionState})`);
+      const offer = await pc.createOffer({ iceRestart: true });
+      const offerSdp = highQualityOpus(offer.sdp!);
+      await pc.setLocalDescription({ type: "offer", sdp: offerSdp });
+      send({ type: "signal", to: viewerId, data: { kind: "offer", sdp: offerSdp } });
+    };
+
     const updateSending = async (viewerId: string, pc: RTCPeerConnection) => {
       const sending = !paused && !blindViewers.has(viewerId);
       const audioTrack = stream.getAudioTracks()[0] ?? null;
@@ -377,6 +395,18 @@ function startStreamerMode() {
               send({ type: "signal", to: msg.viewerId, data: { kind: "ice", candidate: e.candidate.toJSON() } });
             }
           };
+          // La connexion vidéo décroche (changement de réseau, grosses pertes de paquets…) :
+          // "disconnected" se rétablit souvent tout seul, on attend donc 4 s ; "failed" ne se rétablit
+          // jamais seul : on relance tout de suite (ICE restart)
+          const viewerId = msg.viewerId;
+          pc.onconnectionstatechange = () => {
+            if (pc.connectionState === "failed") void restartIce(viewerId, pc);
+            else if (pc.connectionState === "disconnected") {
+              setTimeout(() => {
+                if (pc.connectionState === "disconnected") void restartIce(viewerId, pc);
+              }, 4000);
+            }
+          };
 
           // sendEncodings permet de fixer le débit max : c'est ce qui fait la différence de qualité.
           // En pause, on réserve l'emplacement ("video" = vide) sans rien envoyer : la reprise le remplira.
@@ -410,6 +440,9 @@ function startStreamerMode() {
           if (msg.data.kind === "quality") {
             viewerQualities.set(msg.from, msg.data.preset);
             await applyViewerQuality(pc, msg.data.preset);
+          } else if (msg.data.kind === "restart-ice") {
+            // Le spectateur nous signale que sa vidéo a décroché (par ex. après une reconnexion)
+            void restartIce(msg.from, pc);
           } else {
             await applySignal(pc, msg.data);
           }
@@ -801,7 +834,26 @@ function startViewerMode(roomId: string) {
 
   setStatus("Connexion au salon…");
 
-  const { ws, send } = connect(async (msg) => {
+  // --- Connexion au serveur, avec reconnexion automatique ---
+  // Si la connexion au serveur se coupe (Wi-Fi qui saute, relais qui coupe…), on se reconnecte tout
+  // seul. Une fois accepté, on revient avec son jeton secret ("resume") : le serveur nous a gardé
+  // notre place 30 s, sans mot de passe ni salle d'attente, et la vidéo (en direct) n'est pas coupée.
+  let socket: ReturnType<typeof connect>;
+  let resumeToken: string | null = null; // reçu une fois accepté par le streamer
+  let stopReconnecting = false; // expulsé, refusé, bloqué, stream terminé : ne pas revenir
+  let reconnectAttempts = 0;
+  const send = (msg: ClientMessage) => {
+    if (socket.ws.readyState === WebSocket.OPEN) socket.send(msg);
+  };
+
+  /** Relance de la vidéo : demander au streamer de renégocier notre connexion (ICE restart). */
+  let restartRequests = 0;
+  const requestIceRestart = () => {
+    restartRequests++;
+    send({ type: "signal", to: "streamer", data: { kind: "restart-ice" } });
+  };
+
+  const handleMessage = async (msg: ServerMessage) => {
     switch (msg.type) {
       case "password-required":
         // Le salon existe : on demande le mot de passe (le streamer ne sait même pas qu'on est là)
@@ -825,6 +877,7 @@ function startViewerMode(roomId: string) {
         passwordError.textContent = `${why} Réessaie dans ${minutes} minute(s), en rechargeant la page.`;
         lockForm();
         setStatus("");
+        stopReconnecting = true;
         break;
       }
 
@@ -837,6 +890,7 @@ function startViewerMode(roomId: string) {
       case "join-refused":
         lockForm();
         setStatus("Le streamer a refusé ta demande.", true);
+        stopReconnecting = true;
         break;
 
       case "kicked":
@@ -844,47 +898,61 @@ function startViewerMode(roomId: string) {
         video.srcObject = null;
         $("player").hidden = true;
         setStatus("👢 Tu as été expulsé du stream.", true);
+        stopReconnecting = true;
         break;
 
       case "joined":
         // Accepté par le streamer : on cache le formulaire et on affiche le lecteur
+        resumeToken = msg.resumeToken;
         passwordForm.hidden = true;
         $("player").hidden = false;
         setStatus("En attente du flux vidéo…");
         break;
 
+      case "resumed":
+        // Reconnecté au serveur : on a retrouvé notre place. Si la vidéo a décroché entre-temps,
+        // on demande au streamer de la relancer.
+        setStatus("✅ Reconnecté.");
+        setTimeout(() => {
+          if ($("status").textContent === "✅ Reconnecté.") setStatus("");
+        }, 3000);
+        if (pc && pc.connectionState !== "connected" && pc.connectionState !== "connecting") requestIceRestart();
+        break;
+
+      case "resume-failed":
+        // Trop tard (plus de 30 s) ou stream terminé : on repart de zéro (mot de passe, salle d'attente)
+        resumeToken = null;
+        pc?.close();
+        pc = null;
+        video.srcObject = null;
+        $("player").hidden = true;
+        // Dans le formulaire (et pas dans la ligne d'état, que "password-required" efface juste après)
+        passwordError.textContent = "La reconnexion a pris trop de temps : retape le mot de passe pour revenir.";
+        passwordInput.value = "";
+        passwordBtn.disabled = false;
+        send({ type: "join-room", roomId });
+        break;
+
       case "signal": {
         if (msg.data.kind === "offer") {
-          // Le streamer nous fait une offre : on crée notre connexion et on répond
-          pc = new RTCPeerConnection(RTC_CONFIG);
-          pc.onicecandidate = (e) => {
-            if (e.candidate) {
-              send({ type: "signal", to: "streamer", data: { kind: "ice", candidate: e.candidate.toJSON() } });
-            }
-          };
-          pc.ontrack = (e) => {
-            if (video.srcObject !== e.streams[0]) {
-              video.srcObject = e.streams[0]!;
-              void playWithSound(); // une seule fois : l'image et le son arrivent dans le même flux
-            }
-            setStatus("");
-          };
-          pc.onconnectionstatechange = () => {
-            if (pc?.connectionState === "failed") {
-              setStatus("Impossible d'établir la connexion directe (réseau trop restrictif ?).", true);
-            }
-          };
+          // Le streamer nous fait une offre. Première offre : on crée notre connexion vidéo.
+          // Offre suivante (relance de la vidéo, "ICE restart") : on la renégocie sur la MÊME connexion.
+          const isNew = !pc || pc.connectionState === "closed";
+          if (isNew) pc = createViewerConnection();
+          const current = pc!;
 
-          await pc.setRemoteDescription({ type: "offer", sdp: msg.data.sdp });
-          const answer = await pc.createAnswer();
+          await current.setRemoteDescription({ type: "offer", sdp: msg.data.sdp });
+          const answer = await current.createAnswer();
           // Le spectateur indique lui aussi qu'il accepte la stéréo haute qualité (sinon : mono)
           const answerSdp = highQualityOpus(answer.sdp!);
-          await pc.setLocalDescription({ type: "answer", sdp: answerSdp });
+          await current.setLocalDescription({ type: "answer", sdp: answerSdp });
           send({ type: "signal", to: "streamer", data: { kind: "answer", sdp: answerSdp } });
-          // Juste après la réponse : on annonce la qualité voulue (le streamer l'applique
-          // dès qu'il a traité la réponse, les messages arrivant dans l'ordre)
-          send({ type: "signal", to: "streamer", data: { kind: "quality", preset: viewerQuality } });
-          startStats(pc);
+          if (isNew) {
+            // Juste après la réponse : on annonce la qualité voulue (le streamer l'applique
+            // dès qu'il a traité la réponse, les messages arrivant dans l'ordre)
+            send({ type: "signal", to: "streamer", data: { kind: "quality", preset: viewerQuality } });
+            startStats(current);
+          }
         } else if (msg.data.kind === "pause") {
           // La connexion reste ouverte : la dernière image reste figée, on affiche juste le bandeau
           paused = msg.data.paused;
@@ -904,6 +972,7 @@ function startViewerMode(roomId: string) {
         setStatus("Le stream est terminé.");
         pc?.close();
         video.srcObject = null;
+        stopReconnecting = true;
         break;
 
       case "error":
@@ -911,10 +980,69 @@ function startViewerMode(roomId: string) {
         passwordBtn.disabled = false; // ex. "Choisis un pseudo" : on peut corriger et réessayer
         break;
     }
-  });
+  };
 
-  // 1er contact sans mot de passe : le serveur répond "password-required" si le salon existe
-  ws.addEventListener("open", () => send({ type: "join-room", roomId }));
+  /** Notre connexion vidéo avec le streamer, et ce qu'on fait quand elle décroche. */
+  function createViewerConnection(): RTCPeerConnection {
+    const connection = new RTCPeerConnection(RTC_CONFIG);
+    connection.onicecandidate = (e) => {
+      if (e.candidate) {
+        send({ type: "signal", to: "streamer", data: { kind: "ice", candidate: e.candidate.toJSON() } });
+      }
+    };
+    connection.ontrack = (e) => {
+      if (video.srcObject !== e.streams[0]) {
+        video.srcObject = e.streams[0]!;
+        void playWithSound(); // une seule fois : l'image et le son arrivent dans le même flux
+      }
+      setStatus("");
+    };
+    connection.onconnectionstatechange = () => {
+      const state = connection.connectionState;
+      if (state === "connected") {
+        restartRequests = 0;
+        if (/vidéo/.test($("status").textContent ?? "")) setStatus("");
+      } else if (state === "disconnected") {
+        // Souvent passager (quelques paquets perdus) : WebRTC se rétablit souvent tout seul
+        setStatus("⚠️ Connexion vidéo instable…", true);
+      } else if (state === "failed") {
+        // La connexion vidéo a décroché : on demande au streamer de la relancer (ICE restart)
+        if (restartRequests < 3) {
+          setStatus("⚠️ Connexion vidéo perdue, relance en cours…", true);
+          requestIceRestart();
+        } else {
+          setStatus("Impossible de rétablir la connexion directe (réseau trop restrictif ?).", true);
+        }
+      }
+    };
+    return connection;
+  }
+
+  /** Ouvre (ou rouvre) la connexion au serveur. */
+  const openSocket = () => {
+    socket = connect(handleMessage);
+    socket.ws.addEventListener("open", () => {
+      reconnectAttempts = 0;
+      // Déjà accepté : on reprend notre place avec le jeton. Sinon : 1er contact sans mot de passe
+      // (le serveur répond "password-required" si le salon existe).
+      if (resumeToken) send({ type: "resume", roomId, resumeToken });
+      else send({ type: "join-room", roomId });
+    });
+    socket.ws.addEventListener("close", () => {
+      if (stopReconnecting) return;
+      setStatus(
+        resumeToken
+          ? "⚠️ Connexion au serveur perdue, reconnexion… (la vidéo continue si elle passe encore)"
+          : "⚠️ Connexion au serveur perdue, reconnexion…",
+        true,
+      );
+      // 1 s, 2 s, 4 s, puis toutes les 5 s : assez vite pour rester dans les 30 s de grâce
+      const delay = Math.min(1000 * 2 ** reconnectAttempts, 5000);
+      reconnectAttempts++;
+      setTimeout(openSocket, delay);
+    });
+  };
+  openSocket();
 
   passwordForm.addEventListener("submit", (e) => {
     e.preventDefault(); // sinon le navigateur rechargerait la page en envoyant le formulaire

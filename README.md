@@ -215,6 +215,9 @@ Il est **réduit par défaut** : son en-tête affiche un résumé (« 2 applis e
    **🔇 Couper le son** le coupe (et **🔊 Activer le son** le remet, si un navigateur strict l'a refusé au départ).
 4. **⚙️ Options**, en haut à droite : choisis ta **qualité** (baisse-la si ta connexion rame) et affiche les
    **stats** si tu veux voir la résolution, les fps et le débit reçus (image, et son en 🔊 kb/s).
+5. Si ta connexion saute (Wi-Fi, changement de réseau…), **pas besoin de recharger la page** : elle se reconnecte
+   toute seule (« ⚠️ Connexion au serveur perdue, reconnexion… » puis « ✅ Reconnecté »), sans retaper le mot de
+   passe, tant que la coupure dure moins de 30 secondes. Au-delà, il faut retaper le mot de passe.
 
 ### Arrêter l'appli
 
@@ -340,6 +343,25 @@ Le serveur choisit donc lui-même la meilleure adresse pour le lien généré :
 - Les pseudos sont affichés avec `textContent`, jamais `innerHTML` : un pseudo comme `<b>gras</b>` s'affiche tel
   quel, sans pouvoir injecter de code chez le streamer.
 - Seul le streamer du salon peut accepter, refuser ou expulser : le serveur le vérifie à chaque demande.
+
+### Connexions stables
+
+Un spectateur a **deux connexions** avec le streamer : la **vidéo** (WebRTC, en direct entre les deux PC) et une
+connexion de **contrôle** avec le serveur (WebSocket, via le tunnel). Les deux sont protégées contre les coupures :
+
+- **Ping toutes les 30 s.** Une fois la vidéo lancée, la connexion de contrôle ne transporte presque plus rien,
+  et le tunnel Cloudflare coupe un WebSocket inactif au bout d'environ 2 minutes (mesuré : 125 s). C'était la
+  cause des déconnexions toutes les quelques minutes. Le serveur envoie donc un ping à chaque connexion toutes les
+  30 s (le navigateur répond tout seul) ; une connexion qui ne répond plus est fermée proprement.
+- **Reconnexion automatique.** Une fois accepté, le spectateur reçoit un **jeton secret de reprise**. Si sa
+  connexion de contrôle se coupe quand même, le serveur le garde **30 s** (sans prévenir le streamer) et le
+  spectateur se reconnecte tout seul avec son jeton (1 s, 2 s, 4 s, puis toutes les 5 s) : pas de mot de passe,
+  pas de salle d'attente, et la vidéo, qui passe en direct, n'est pas coupée. Après 30 s, il est retiré et doit
+  retaper le mot de passe. Une **expulsion** (👢) annule le jeton : pas de retour possible par ce biais.
+- **Relance de la vidéo (ICE restart).** Si la connexion vidéo décroche (`failed`, ou `disconnected` pendant plus
+  de 4 s), le streamer envoie une nouvelle offre avec `iceRestart: true` : les deux navigateurs cherchent un
+  nouveau chemin réseau, **sur la même connexion** (qualité, pause, aveugle… sont conservés). Le spectateur peut
+  aussi la demander (`restart-ice`), par exemple après une reconnexion, ou jusqu'à 3 fois si elle échoue encore.
 
 ### Sécurité
 
