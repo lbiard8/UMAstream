@@ -11,7 +11,7 @@
 //     -> volume général -> piste audio du stream (MediaStreamAudioDestinationNode)
 // Les applications de vocal (Discord…) sont décochées par défaut : tes potes ne s'entendent pas en écho.
 
-import type { AppBridge, AudioApp } from "../shared/app-bridge.js";
+import type { AudioCaptureApi, AudioApp } from "../../shared/app-bridge.js";
 
 /** Applications de vocal : décochées par défaut (nom de l'exécutable, sans ".exe", en minuscules). */
 const VOICE_APPS = new Set([
@@ -83,13 +83,13 @@ export class StreamAudioMixer {
   onChange: (() => void) | null = null;
 
   private constructor(
-    private readonly app: AppBridge,
+    private readonly app: AudioCaptureApi,
     private readonly list: HTMLUListElement,
     private readonly emptyNote: HTMLElement,
   ) {}
 
   /** Crée le mélangeur et branche le panneau du son. */
-  static async create(app: AppBridge, panel: HTMLElement): Promise<StreamAudioMixer> {
+  static async create(app: AudioCaptureApi, panel: HTMLElement): Promise<StreamAudioMixer> {
     const mixer = new StreamAudioMixer(
       app,
       panel.querySelector<HTMLUListElement>("#audio-list")!,

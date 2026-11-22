@@ -26,32 +26,55 @@ par un `canvas.captureStream()`.
 
 ## Architecture
 
+Organisé selon SOLID (refonte du 22/11/2026) : un fichier = un rôle ; les « chefs d'orchestre » (`*-mode.ts`,
+`server.ts`, `electron/main.ts`) ne font que brancher les morceaux ; messages traités par une TABLE
+`{ type: gestionnaire }` (`shared/dispatch.ts`) au lieu d'un `switch` ; dépendances passées en paramètre.
+
 ```
-shared/messages.ts    Types des messages WebSocket client <-> serveur (contrat partagé)
-shared/app-bridge.ts  window.umastreamApp : ce que l'appli de bureau ajoute à la page
-server/server.ts      Serveur HTTP (sert public/) + signalisation WebSocket : salons, mot de passe, salle d'attente,
-                      expulsion, ping 30 s, période de grâce 30 s + reprise par jeton
-server/network.ts     IP locale + tunnel cloudflared (UMASTREAM_CLOUDFLARED = chemin de l'exe fourni par l'appli)
-server/password.ts    scrypt + timingSafeEqual, 5 essais/IP puis blocage 5 min, délai 5 min après un refus
-server/limits.ts      Plafonds : 10 connexions/IP, 100 au total, 20 demandes/min/IP, 20 en attente/salon
-client/main.ts        Toute la page : mode streamer (pas de ?room=) et mode spectateur (?room=xxx)
-client/app-audio.ts   Appli : panneau « Son du stream » + mélangeur (AudioWorklet public/pcm-worklet.js)
-client/app-picker.ts  Appli : fenêtre de choix d'écran (miniatures, fenêtres réduites rouvertes)
-electron/main.ts      Appli : fenêtre, serveur intégré (import de server.js après réglage des variables d'env),
-                      choix d'écran (setDisplayMediaRequestHandler), lancement de umastream-audio.exe
-electron/preload.ts   Pont contextIsolation/sandbox -> window.umastreamApp
-native/audio-helper/  umastream-audio.exe (Rust, crates wasapi + windows + sysinfo) :
-                      list (sessions audio), capture <pid> (process loopback, f32 48 kHz stéréo sur stdout),
-                      windows (fenêtres réduites), restore <hwnd> (rouvre sans focus)
-public/               main-page.html (servie sur "/"), style.css, logo.png, pcm-worklet.js, app.js (généré)
-scripts/              build-app.mjs (esbuild), fetch-cloudflared.ps1, make-icon.ps1, create-shortcut.ps1
-UMAstream.cmd         Lanceur de la version navigateur (raccourci « UMAstream (navigateur) »)
+shared/messages.ts       Types des messages WebSocket client <-> serveur (contrat partagé)
+shared/dispatch.ts       MessageHandlers + dispatch() : table « type de message -> fonction »
+shared/app-bridge.ts     window.umastreamApp, découpé : ScreenSourceApi, AudioCaptureApi, ShellApi (= AppBridge)
+
+server/server.ts         Point d'entrée : branche tout, écoute, tunnel, serverReady (pour l'appli)
+server/config.ts         PORT, --tunnel, --open, UMASTREAM_EMBEDDED / _PUBLIC_DIR
+server/static-files.ts   Sert public/ (protection "../")
+server/signaling.ts      WebSocketServer : plafonds de connexions, ws.on("error") en premier, -> handlers
+server/handlers.ts       Un gestionnaire par message (create-room, join-room, join-answer, resume, kick, signal)
+                         + limiteurs (essais, refus 5 min, 20 demandes/min)
+server/rooms.ts          RoomRegistry : salons, salle d'attente, acceptés, jetons de reprise, grâce 30 s
+server/keepalive.ts      Ping 30 s (Cloudflare coupe à ~125 s)
+server/client-ip.ts      Vraie IP (cf-connecting-ip si loopback), isFromThisPc
+server/send.ts · open-browser.ts · network.ts (IP locale + cloudflared) · password.ts (scrypt) · limits.ts
+
+client/main.ts           Point d'entrée : ?room= -> viewer, sinon streamer
+client/core/             dom ($, setStatus) · prefs (localStorage) · quality (résolutions, presets) ·
+                         webrtc (RTC_CONFIG, highQualityOpus, applySignal) · signaling (SignalingClient :
+                         file d'attente, envoi protégé, reconnexion 1/2/4/5 s) · errors (ShareError)
+client/streamer/         streamer-mode (orchestre) · screen-capture (CaptureSource navigateur | appli, ScreenCapture :
+                         changer d'écran / qualité) · viewer-peers (ViewerPeers : 1 RTCPeerConnection par
+                         spectateur, pause, aveugle, qualité, ICE restart) · waiting-room · people-panel (affichage
+                         seul) · live-panel (lien, pause) · quality-menus · audio-panel (appli) · diagnostics
+client/viewer/           viewer-mode (orchestre) · join-form · player (vidéo, son, bandeau) · viewer-connection
+                         (RTCPeerConnection + demandes de relance) · options-panel (⚙️) · stats
+client/desktop/          Appli seulement : audio-mixer (mélangeur, AudioWorklet public/pcm-worklet.js) ·
+                         screen-picker (fenêtre de choix d'écran)
+
+electron/main.ts         Appli : fenêtre, instance unique, port libre, import de server.js APRÈS les variables d'env
+electron/native-helper.ts NativeHelper : lance umastream-audio.exe (list, capture, windows, restore)
+electron/screen-sources.ts ScreenSources : liste (+ fenêtres réduites), select, setDisplayMediaRequestHandler
+electron/ipc.ts          Relie chaque canal ipcMain au bon service
+electron/preload.ts      Pont contextIsolation/sandbox -> window.umastreamApp
+native/audio-helper/     umastream-audio.exe (Rust, crates wasapi + windows + sysinfo) :
+                         list (sessions audio), capture <pid> (process loopback, f32 48 kHz stéréo sur stdout),
+                         windows (fenêtres réduites), restore <hwnd> (rouvre sans focus)
+public/                  main-page.html (servie sur "/"), style.css, logo.png, pcm-worklet.js, app.js (généré)
+scripts/                 build-app.mjs (esbuild), fetch-cloudflared.ps1, make-icon.ps1, create-shortcut.ps1
+UMAstream.cmd            Lanceur de la version navigateur (raccourci « UMAstream (navigateur) »)
 ```
 
 Flux : streamer `create-room` (localhost uniquement) → spectateur `join-room` + mot de passe + pseudo → salle
-d'attente → le streamer accepte → `viewer-joined` → le streamer fait l'offre WebRTC (une `RTCPeerConnection` par
-spectateur) → vidéo en direct. Envoi par spectateur contrôlé par `updateSending()` (pause / aveugle →
-`replaceTrack(null)`), qualité par spectateur par `applyViewerQuality()` (`setParameters`).
+d'attente → le streamer accepte → `viewer-joined` → `ViewerPeers.add()` fait l'offre WebRTC → vidéo en direct.
+Pause / aveugle → `updateSending()` (`replaceTrack(null)`), qualité par spectateur → `applyQuality()` (`setParameters`).
 
 ## Avancement
 
@@ -59,8 +82,9 @@ Fait : #1 #2 (qualités), #3 (icône), #6 (lien internet), #7 (pause), #8 (compt
 #11 (Bun : non, gardé Node), #12 (accepter/refuser + panneau spectateurs 👁️/🙈/👢), #15 (qualité en direct),
 #16 (changer d'écran), #19 (son par application, appli Electron).
 
-En cours : **#23 déconnexions** — fait et testé sur la branche `feat/23-deconnexions-frequentes`, **pas encore
-commité** (ping 30 s, reconnexion par jeton, ICE restart). Reste : version 0.2.0 ? + nouvel installateur + Release.
+En cours : **#23 déconnexions** — fait, testé et commité sur la branche `feat/23-deconnexions-frequentes` (ping 30 s,
+reconnexion par jeton, ICE restart), suivi de la refonte SOLID et de la licence. Reste : version 0.2.0 ? + nouvel
+installateur + Release (la première sous licence PolyForm) + fusion dans `main`.
 
 À faire : #4 lien via Discord (idée retenue : webhook qui poste/supprime le lien, pas de bot hébergé),
 #5 durée d'hébergement, #10 masquer l'IP (relais TURN ; alternative proposée : avertissement obligatoire),
