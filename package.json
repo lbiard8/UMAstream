@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "description": "Partage d'écran en haute qualité dans le navigateur, via WebRTC.",
-  "author": "UMAstream",
+  "author": "L. Biard",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "main": "dist/main.js",
   "scripts": {
     "app": "npm run build:client && npm run build:app && npm run build:audio && electron .",

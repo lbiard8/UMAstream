@@ -100,6 +100,10 @@ installateur + Release (la première sous licence PolyForm) + fusion dans `main`
 - Applis de vocal décochées par défaut (Discord…) pour éviter l'écho chez les spectateurs.
 - Le son du spectateur démarre activé (le clic « Rejoindre » autorise la lecture avec son).
 - Installateur non signé (SmartScreen : « Informations complémentaires → Exécuter quand même »).
+- Licence **PolyForm Noncommercial 1.0.0** (`LICENSE.md`, « Required Notice: Copyright (c) 2026 L. Biard ») : usage
+  libre sauf commercial. Pas « open source » au sens OSI → pas de signature gratuite type SignPath. Pas de page de
+  licence dans l'installateur (choix de l'utilisateur). Licences des composants : `THIRD_PARTY_LICENSES.md` (à mettre
+  à jour si on ajoute une dépendance livrée dans l'appli).
 
 ## Pièges connus
 

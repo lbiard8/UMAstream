@@ -483,3 +483,12 @@ Dossiers générés (ignorés par git) : `dist/` (appli compilée), `release/` (
 - Le son par application demande Windows 11 (ou Windows 10 build 20348+).
 - L'installateur n'est pas signé (une signature coûte plusieurs centaines d'euros par an) : Windows affiche un
   avertissement à l'installation.
+
+## 4. Licence
+
+UMAstream est sous licence [PolyForm Noncommercial 1.0.0](LICENSE.md) : tu peux l'utiliser, le modifier et le
+partager librement **pour tout usage non commercial** (usage perso, école, association, recherche…), à condition de
+garder la licence et la mention `Copyright (c) 2026 L. Biard`. **Tout usage commercial est interdit** sans l'accord
+de l'auteur. Seul le texte anglais de [LICENSE.md](LICENSE.md) fait foi.
+
+Les programmes inclus dans UMAstream gardent leur propre licence : voir [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
