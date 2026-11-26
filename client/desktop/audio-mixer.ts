@@ -5,19 +5,26 @@
 // toi-même ne change pas.
 //
 // Comment le son circule, pour chaque application cochée :
-//   umastream-audio.exe capture <pid>  (processus principal d'Electron)
+//   umastream-audio capture <pid>  (lancé par le processus principal d'Electron)
 //     -> morceaux de son envoyés à la page (window.umastreamApp.onAudioData)
 //     -> lecteur "pcm-player" (AudioWorklet) -> mesure du niveau -> volume de l'appli
 //     -> volume général -> piste audio du stream (MediaStreamAudioDestinationNode)
 // Les applications de vocal (Discord…) sont décochées par défaut : tes potes ne s'entendent pas en écho.
 
-import type { AppBridge, AudioApp } from "../shared/app-bridge.js";
+import type { AudioCaptureApi, AudioApp } from "../../shared/app-bridge.js";
 
-/** Applications de vocal : décochées par défaut (nom de l'exécutable, sans ".exe", en minuscules). */
+/**
+ * Applications de vocal : décochées par défaut (nom de l'exécutable sans ".exe", en minuscules).
+ * Les noms changent selon le système : "Discord.exe" (Windows), "Discord" (macOS : nom de l'appli),
+ * "discord" (Linux), "zoom.us" (macOS)…
+ */
 const VOICE_APPS = new Set([
   "discord", "discordptb", "discordcanary", "teamspeak", "ts3client_win64", "ts3client_win32",
   "teams", "ms-teams", "msteams", "zoom", "skype", "mumble", "slack", "signal", "whatsapp",
   "telegram", "guilded", "element", "webex", "ciscocollabhost",
+  // macOS et Linux
+  "zoom.us", "microsoft teams", "teams-for-linux", "telegram desktop", "telegram-desktop", "facetime",
+  "skypeforlinux", "signal-desktop", "vesktop",
 ]);
 
 /** Noms lisibles des applications courantes (sinon : le nom de l'exécutable). */
@@ -27,6 +34,9 @@ const FRIENDLY_NAMES: Record<string, string> = {
   steam: "Steam", steamwebhelper: "Steam", vlc: "VLC", obs64: "OBS", teams: "Teams", "ms-teams": "Teams",
   zoom: "Zoom", ts3client_win64: "TeamSpeak", teamspeak: "TeamSpeak", wmplayer: "Lecteur Windows Media",
   "microsoft.media.player": "Lecteur multimédia", deezer: "Deezer", applemusic: "Apple Music",
+  // Linux (sous macOS, le nom de l'appli est déjà lisible : "Google Chrome", "Spotify"…)
+  "google-chrome": "Google Chrome", chromium: "Chromium", "chromium-browser": "Chromium", "zoom.us": "Zoom",
+  "teams-for-linux": "Teams", "telegram-desktop": "Telegram", "signal-desktop": "Signal", vesktop: "Discord (Vesktop)",
 };
 
 const exeBase = (exe: string) => exe.toLowerCase().replace(/\.exe$/, "");
@@ -83,13 +93,13 @@ export class StreamAudioMixer {
   onChange: (() => void) | null = null;
 
   private constructor(
-    private readonly app: AppBridge,
+    private readonly app: AudioCaptureApi,
     private readonly list: HTMLUListElement,
     private readonly emptyNote: HTMLElement,
   ) {}
 
   /** Crée le mélangeur et branche le panneau du son. */
-  static async create(app: AppBridge, panel: HTMLElement): Promise<StreamAudioMixer> {
+  static async create(app: AudioCaptureApi, panel: HTMLElement): Promise<StreamAudioMixer> {
     const mixer = new StreamAudioMixer(
       app,
       panel.querySelector<HTMLUListElement>("#audio-list")!,
@@ -113,7 +123,7 @@ export class StreamAudioMixer {
       saveJson("umastream.audio.master", mixer.master.gain.value);
     });
 
-    // Son reçu de umastream-audio.exe -> lecteur de l'application correspondante
+    // Son reçu de umastream-audio -> lecteur de l'application correspondante
     app.onAudioData((pid, samples) => {
       const channel = mixer.channels.get(pid);
       if (!channel) return;

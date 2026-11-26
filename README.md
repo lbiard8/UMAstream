@@ -1,44 +1,50 @@
 # UMAstream
 
 Partage ton écran en haute qualité (jusqu'à la résolution native de l'écran, 60 fps), via WebRTC, depuis
-l'application UMAstream pour Windows ou directement depuis le navigateur. Pas de compte : tu lances l'appli sur
-ton PC, tu envoies le lien et le mot de passe, tes potes regardent dans leur navigateur.
+l'application UMAstream (**Windows, macOS et Linux**) ou directement depuis le navigateur. Pas de compte : tu
+lances l'appli sur ton PC, tu envoies le lien et le mot de passe, tes potes regardent dans leur navigateur.
 
 1. [Installation](#1-installation) : à faire une seule fois par PC
 2. [Utilisation](#2-utilisation) : streamer, regarder, arrêter
 3. [Comment ça marche](#3-comment-ça-marche) : les détails techniques
+4. [Licence](#4-licence)
 
 ---
 
 ## 1. Installation
 
-À faire **une seule fois** sur chaque PC qui veut streamer (Windows).
-Pour **regarder** un stream, il n'y a rien à installer : un navigateur suffit.
+À faire **une seule fois** sur chaque ordinateur qui veut streamer (Windows, macOS ou Linux).
+Pour **regarder** un stream, il n'y a rien à installer : un navigateur suffit, sur n'importe quel système.
 
 Deux façons de streamer :
 
 | | Application UMAstream (recommandée) | Version navigateur |
 |---|---|---|
-| Installation | Un installateur à [télécharger](https://github.com/lbiard8/UMAstream/releases/latest), rien d'autre | Node.js + cloudflared + le projet |
-| **Son par application** (ex. : tout sauf Discord) | ✅ (Windows 11) | ❌ (tout le son du PC, ou un onglet) |
+| Installation | Un fichier à [télécharger](https://github.com/lbiard8/UMAstream/releases/latest), rien d'autre | Node.js + cloudflared + le projet |
+| **Son par application** (ex. : tout sauf Discord) | ✅ Windows 11, macOS 14.2+, Linux (PulseAudio / PipeWire) | ❌ (tout le son du PC, ou un onglet) |
 
 ### A. L'application UMAstream (recommandée)
 
 Le tunnel (cloudflared) est inclus dans l'application : il n'y a rien d'autre à installer.
 
-**1. Télécharger l'installateur**
+**1. Télécharger le fichier de ton système**
 
-👉 **https://github.com/lbiard8/UMAstream/releases/latest**
+👉 **https://github.com/lbiard8/UMAstream/releases/latest**, partie **Assets** :
 
-Dans la partie **Assets**, clique sur **`UMAstream.Setup.0.1.0.exe`** (environ 130 Mo). Pas besoin de cloner le
-dépôt ni d'installer Node.js : l'installateur contient tout.
+| Système | Fichier |
+|---|---|
+| Windows 10 / 11 | **`UMAstream.Setup.0.2.0.exe`** |
+| macOS 12 ou plus récent (Mac Intel et Apple Silicon) | **`UMAstream-0.2.0-universal.dmg`** |
+| Linux (PC 64 bits) | **`UMAstream-0.2.0.AppImage`** |
 
-> Si tu as fabriqué l'installateur toi-même ([voir plus bas](#fabriquer-linstallateur)), il est dans le dossier
-> **`release\`** du projet, sous le nom `UMAstream Setup 0.1.0.exe`.
+Pas besoin de cloner le dépôt ni d'installer Node.js : le fichier contient tout.
+
+#### Windows
 
 **2. Double-clic sur l'installateur.** Il n'est pas signé, Windows affiche donc un écran bleu
 « **Windows a protégé votre ordinateur** » :
 1. clique sur le lien **Informations complémentaires** (sous le texte) ;
+2. puis sur le bouton **Exécuter quand même**.
 
 Cet avertissement n'apparaît qu'à l'installation, pas à chaque lancement.
 
@@ -63,14 +69,57 @@ Une icône **UMAstream** est créée sur le **bureau** et dans le **menu Démarr
      de gare…). Les autoriser n'est utile que pour le lien « réseau local », et expose le serveur aux autres
      appareils de ce réseau public : mieux vaut ne pas le faire.
 
+#### macOS
+
+**2. Installer** : double-clic sur le `.dmg`, puis **glisse UMAstream dans le dossier Applications**.
+
+**3. Premier lancement.** L'appli n'est pas signée par Apple (cela coûte 99 $ par an) : macOS la bloque la
+première fois avec « Apple n'a pas pu vérifier… » ou « impossible d'ouvrir UMAstream ».
+1. Clique sur **OK** (pas sur « Placer dans la corbeille ») ;
+2. ouvre **Réglages Système → Confidentialité et sécurité**, descends jusqu'au message sur UMAstream et clique
+   sur **Ouvrir quand même**, puis confirme (mot de passe de ta session).
+   - Sur macOS 14 ou plus ancien, plus simple : **clic droit** (ou Ctrl+clic) sur UMAstream dans Applications
+     → **Ouvrir** → **Ouvrir**.
+   - Si macOS dit « **UMAstream est endommagé** » : ouvre le **Terminal** et tape
+     `xattr -cr /Applications/UMAstream.app`, puis relance l'appli.
+
+Ce blocage n'arrive qu'au premier lancement.
+
+**4. Les autorisations**, demandées par macOS au premier stream :
+- **Enregistrement de l'écran** : macOS t'envoie dans **Réglages Système → Confidentialité et sécurité →
+  Enregistrement de l'écran et de l'audio système**. Active **UMAstream**, puis **quitte et relance** l'appli.
+- **Enregistrer l'audio d'autres applications** (pour le son par application, macOS 14.2+) : clique sur
+  **Autoriser**.
+
+#### Linux
+
+**2. Rendre le fichier exécutable** : clic droit sur `UMAstream-0.2.0.AppImage` → **Propriétés** →
+**Permissions** → coche **Autoriser l'exécution comme un programme**. Ou dans un terminal :
+
+```bash
+chmod +x UMAstream-0.2.0.AppImage
+```
+
+**3. Double-clic pour lancer** (ou `./UMAstream-0.2.0.AppImage` dans le terminal). Il n'y a pas
+d'installation : l'AppImage est l'appli elle-même, range-la où tu veux.
+
+> **Pièges possibles**
+> - Rien ne se passe, ou une erreur parle de **FUSE** (Ubuntu 22.04 et plus récent) : installe la bibliothèque
+>   manquante, puis relance : `sudo apt install libfuse2t64` (Ubuntu 24.04+) ou `sudo apt install libfuse2`
+>   (Ubuntu 22.04).
+> - Le **son par application** utilise PulseAudio ou PipeWire (le son par défaut d'Ubuntu, Fedora, Mint…).
+> - Sous **Wayland** (Ubuntu récent, Fedora…), Linux affiche aussi sa propre fenêtre de choix de l'écran : c'est
+>   normal, choisis l'écran ou la fenêtre à partager.
+
 C'est prêt : tu peux [streamer ton écran](#streamer-ton-écran).
 
 > **Bon à savoir**
-> - **Mettre à jour** : ferme UMAstream, télécharge le nouvel installateur sur la
->   [page des versions](https://github.com/lbiard8/UMAstream/releases/latest) et lance-le : il remplace
->   l'ancienne version (tes réglages sont conservés).
-> - **Tester sans installer** : `release\win-unpacked\UMAstream.exe` lance l'appli directement depuis le projet.
-> - **Désinstaller** : Paramètres Windows → **Applications** → **UMAstream** → Désinstaller.
+> - **Mettre à jour** : ferme UMAstream, télécharge le nouveau fichier sur la
+>   [page des versions](https://github.com/lbiard8/UMAstream/releases/latest) et installe-le comme la première
+>   fois (Windows : il remplace l'ancienne version ; macOS : remplace l'appli dans Applications ; Linux :
+>   remplace l'AppImage). Tes réglages sont conservés.
+> - **Désinstaller** : Windows : Paramètres → **Applications** → **UMAstream** → Désinstaller. macOS : mets
+>   UMAstream (dans Applications) à la corbeille. Linux : supprime l'AppImage.
 
 ### B. La version navigateur (moins fonctionnelle)
 
@@ -79,63 +128,81 @@ par défaut.
 
 **2. Installer cloudflared** (pour que le lien marche depuis n'importe où) :
 
-```powershell
-winget install --id Cloudflare.cloudflared
-```
+| Système | Commande |
+|---|---|
+| Windows | `winget install --id Cloudflare.cloudflared` |
+| macOS | `brew install cloudflared` (avec [Homebrew](https://brew.sh)) |
+| Linux | voir la [page de téléchargement de Cloudflare](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) (paquet `.deb` ou `.rpm`) |
 
 **3. Récupérer le projet** :
 
-```powershell
+```bash
 git clone https://github.com/lbiard8/UMAstream.git
 ```
 
 (ou sur GitHub : **Code → Download ZIP**, puis extraire le dossier)
 
-**4. Créer l'icône sur le bureau**, depuis le dossier du projet :
+**4. Le lanceur**, depuis le dossier du projet :
 
-```powershell
-cd UMAstream
-npm run shortcut
-```
+- **Windows** : crée une icône sur le bureau avec
 
-Une icône **UMAstream (navigateur)** apparaît sur le bureau. Au premier lancement, elle installe d'elle-même ce
-qui manque (environ une minute).
+  ```powershell
+  cd UMAstream
+  npm run shortcut
+  ```
+
+  Une icône **UMAstream (navigateur)** apparaît sur le bureau. Au premier lancement, elle installe d'elle-même
+  ce qui manque (environ une minute).
+- **macOS / Linux** : lance UMAstream avec
+
+  ```bash
+  cd UMAstream
+  chmod +x UMAstream.sh   # la première fois seulement
+  ./UMAstream.sh
+  ```
 
 > **Pièges possibles**
-> - Projet téléchargé en ZIP : au premier double-clic, Windows peut afficher « Windows a protégé votre
+> - Windows, projet téléchargé en ZIP : au premier double-clic, Windows peut afficher « Windows a protégé votre
 >   ordinateur ». Clique sur **Informations complémentaires → Exécuter quand même**.
 > - cloudflared installé alors qu'un terminal était ouvert : ferme et rouvre le terminal.
-> - Dossier du projet déplacé : relance `npm run shortcut`.
+> - Windows, dossier du projet déplacé : relance `npm run shortcut`.
 
 ### Fabriquer l'installateur
 
-Pour créer `UMAstream Setup x.y.z.exe` à partir du projet (une fois, sur ton PC de développement) :
+**Sur ton ordinateur** (pour ton propre système seulement) :
 
-1. Installer **Node.js**, **Rust** (https://rustup.rs) et les **outils C++ de Visual Studio**
-   (« Développement Desktop en C++ », nécessaires à Rust sous Windows).
+1. Installer **Node.js** et **Rust** (https://rustup.rs). En plus :
+   - Windows : les **outils C++ de Visual Studio** (« Développement Desktop en C++ », nécessaires à Rust) ;
+   - macOS : les outils de développement d'Apple (`xcode-select --install`) ;
+   - Linux : `sudo apt install build-essential libpulse-dev` (ou l'équivalent de ta distribution).
 2. Dans le dossier du projet :
 
-```powershell
+```bash
 npm install
 npm run dist
 ```
 
-L'installateur est créé dans `release\`. `npm run dist` compile tout (page, application, programme audio),
-télécharge `cloudflared.exe` (vérifié : signé par Cloudflare) puis assemble l'installateur.
+Le fichier est créé dans `release/`. `npm run dist` compile tout (page, application, programme audio),
+télécharge `cloudflared` (vérifié : empreinte publiée par GitHub, et signature de Cloudflare sous Windows et
+macOS) puis assemble l'installateur. Sur Mac, `npm run dist` fabrique la version de ton processeur
+seulement : la version **universelle** est fabriquée par GitHub Actions (ci-dessous).
 
-**Publier une nouvelle version** (pour que les autres la téléchargent) :
-1. Change `"version"` dans `package.json` (ex. `0.2.0`), puis lance `npm run dist`.
-2. Sur GitHub : **Releases → Draft a new release**, tag `v0.2.0`, et glisse
-   `release\UMAstream Setup 0.2.0.exe` dans **Attach binaries** (GitHub remplace les espaces par des points
-   dans le nom du fichier).
-3. **Publish release**. Le lien [`releases/latest`](https://github.com/lbiard8/UMAstream/releases/latest) pointe
-   alors automatiquement vers cette nouvelle version.
+**Publier une nouvelle version, pour les 3 systèmes d'un coup** (avec GitHub Actions, gratuit) :
+1. Change `"version"` dans `package.json` (ex. `0.3.0`), commite, puis pousse un **tag** du même numéro :
 
-Ou en une commande, avec GitHub CLI :
+   ```bash
+   git tag v0.3.0
+   git push origin v0.3.0
+   ```
 
-```powershell
-gh release create v0.2.0 "release\UMAstream Setup 0.2.0.exe" --title "UMAstream 0.2.0" --notes "…"
-```
+2. Sur GitHub, l'onglet **Actions** montre la fabrication (environ 15 minutes) : les serveurs de GitHub
+   fabriquent l'installateur Windows, le `.dmg` macOS et l'AppImage Linux.
+3. Une fois fini, **Releases** contient un **brouillon** avec les 3 fichiers : complète le texte, puis
+   **Publish release**. Le lien [`releases/latest`](https://github.com/lbiard8/UMAstream/releases/latest)
+   pointe alors automatiquement vers cette nouvelle version.
+
+Pour essayer la fabrication sans publier : **Actions → Release → Run workflow**. Les fichiers sont alors
+téléchargeables en bas du résumé du lancement (« Artifacts »).
 
 ---
 
@@ -158,7 +225,8 @@ gh release create v0.2.0 "release\UMAstream Setup 0.2.0.exe" --title "UMAstream 
 3. Clique sur **Partager mon écran** et choisis ce que tu partages :
    - **application** : choisis un écran ou une fenêtre parmi les miniatures. Les fenêtres **réduites** dans la
      barre des tâches apparaissent avec leur icône et la mention « réduite » : UMAstream les rouvre (sans les passer
-     devant) pour les partager, car Windows ne peut pas capturer une fenêtre réduite. Le son se règle dans le
+     devant) pour les partager, car Windows ne peut pas capturer une fenêtre réduite (sous macOS et Linux, rouvre
+     la fenêtre toi-même avant de la choisir). Le son se règle dans le
      panneau **🔊 Son du stream** (voir ci-dessous) ;
    - **version navigateur** : choisis dans la fenêtre de Chrome. Pour le son, coche « Partager l'audio »
      (écran entier ou onglet seulement : c'est alors tout le son du PC, Discord compris).
@@ -186,9 +254,9 @@ Dans le panneau de droite (sous le reste sur petit écran) :
 | 👥 Spectateurs | 👢 | L'expulser (il peut refaire une demande) |
 | | ☐ Accepter automatiquement | Toute personne qui a le bon mot de passe entre directement |
 
-### Le son du stream (application, Windows 11)
+### Le son du stream (application : Windows 11, macOS 14.2+, Linux)
 
-Le panneau **🔊 Son du stream** liste les applications qui ont du son (comme le mélangeur de volume de Windows).
+Le panneau **🔊 Son du stream** liste les applications qui ont du son (comme le mélangeur de volume du système).
 Il est **réduit par défaut** : son en-tête affiche un résumé (« 2 applis envoyées sur 4 ») et le bouton
 **▸ Agrandir / ▾ Réduire** l'ouvre ou le ferme (le choix est retenu).
 
@@ -215,6 +283,9 @@ Il est **réduit par défaut** : son en-tête affiche un résumé (« 2 applis e
    **🔇 Couper le son** le coupe (et **🔊 Activer le son** le remet, si un navigateur strict l'a refusé au départ).
 4. **⚙️ Options**, en haut à droite : choisis ta **qualité** (baisse-la si ta connexion rame) et affiche les
    **stats** si tu veux voir la résolution, les fps et le débit reçus (image, et son en 🔊 kb/s).
+5. Si ta connexion saute (Wi-Fi, changement de réseau…), **pas besoin de recharger la page** : elle se reconnecte
+   toute seule (« ⚠️ Connexion au serveur perdue, reconnexion… » puis « ✅ Reconnecté »), sans retaper le mot de
+   passe, tant que la coupure dure moins de 30 secondes. Au-delà, il faut retaper le mot de passe.
 
 ### Arrêter l'appli
 
@@ -230,10 +301,11 @@ Pense à le faire quand tu ne streames pas.
 - **Le lien change à chaque lancement** de l'appli : renvoie-le à chaque fois.
 - **Environ 2 à 4 spectateurs en 1080p**, selon ta connexion montante.
 - **Attention à ce que tu montres** : notifications, mots de passe, e-mails… Partage une fenêtre plutôt que
-  l'écran entier, active « Ne pas déranger » dans Windows, et utilise ⏸ Pause avant d'ouvrir quelque chose de privé.
+  l'écran entier, active « Ne pas déranger » (Windows, macOS ou Linux), et utilise ⏸ Pause avant d'ouvrir quelque chose de privé.
 - Sur certains réseaux très fermés (école, entreprise, certaines 4G), la vidéo peut ne pas passer.
-- Le son par application demande **Windows 11** (ou Windows 10 build 20348+). Sur un Windows plus ancien,
-  l'application fonctionne, mais le stream part sans son (le panneau l'indique).
+- Le son par application demande **Windows 11** (ou Windows 10 build 20348+), **macOS 14.2** ou plus récent, ou
+  un **Linux avec PulseAudio / PipeWire**. Sinon, l'application fonctionne, mais le stream part sans son (le
+  panneau l'indique).
 
 ---
 
@@ -254,16 +326,22 @@ sa propre fenêtre. Les spectateurs, eux, restent dans leur navigateur. Elle ajo
 
 - **Sa propre fenêtre de choix d'écran** : Electron n'a pas celle de Chrome. La page affiche des miniatures
   (`desktopCapturer`), puis `getDisplayMedia()` capture la source choisie (`setDisplayMediaRequestHandler`).
-  Windows ne capture pas une fenêtre réduite, et `desktopCapturer` ne les propose donc pas : `umastream-audio.exe
-  windows` liste les fenêtres réduites de la barre des tâches (affichées avec l'icône de leur programme), et
-  `umastream-audio.exe restore <hwnd>` rouvre celle qu'on choisit sans lui donner le focus. L'appli attend
+  Sous Windows, une fenêtre réduite ne peut pas être capturée, et `desktopCapturer` ne les propose donc pas :
+  `umastream-audio windows` liste les fenêtres réduites de la barre des tâches (affichées avec l'icône de leur programme), et
+  `umastream-audio restore <hwnd>` rouvre celle qu'on choisit sans lui donner le focus. L'appli attend
   ensuite qu'elle apparaisse dans les sources d'Electron (`window:<hwnd>:…`) pour la capturer.
-- **Le son par application**, grâce à `umastream-audio.exe` (`native/audio-helper`, en Rust). Windows sait
-  capturer le son d'**un programme et de ses sous-processus** (« process loopback », Windows 11) : chaque
-  application cochée a sa propre capture, et la page mélange le tout :
+- **Le son par application**, grâce à `umastream-audio` (`native/audio-helper`, en Rust ; `.exe` sous Windows).
+  Il capture le son d'**un programme et de ses sous-processus**, avec ce que chaque système propose :
+  - **Windows** : le « process loopback » de WASAPI (Windows 11) ;
+  - **macOS** : les « process taps » de Core Audio (macOS 14.2+), sur l'appli et ses processus d'aide (Helper) ;
+  - **Linux** : PulseAudio / PipeWire, en écoutant chaque flux de l'appli (`monitor stream`), sans couper ce que
+    tu entends ; les flux d'une même appli (un par onglet de Chrome…) sont mélangés.
+
+  Les 4 commandes (`list`, `capture`, `windows`, `restore`) sont les mêmes partout : Electron n'a pas à savoir sur
+  quel système il tourne. Chaque application cochée a sa propre capture, et la page mélange le tout :
 
 ```
-umastream-audio.exe capture <pid>   ->  son brut (48 kHz, stéréo, flottants)  ->  processus principal Electron
+umastream-audio capture <pid>   ->  son brut (48 kHz, stéréo, flottants)  ->  processus principal Electron
   ->  page : lecteur AudioWorklet (public/pcm-worklet.js)  ->  volume de l'appli  ->  volume général
   ->  piste audio du stream (MediaStreamAudioDestinationNode)  ->  WebRTC
 ```
@@ -280,18 +358,18 @@ umastream-audio.exe capture <pid>   ->  son brut (48 kHz, stéréo, flottants)  
 | Commande | Rôle |
 |---|---|
 | `npm run app` | Compile tout et lance l'application de bureau (développement) |
-| `npm run dist` | Compile tout, télécharge cloudflared et fabrique l'installateur dans `release\` |
+| `npm run dist` | Compile tout, télécharge cloudflared et fabrique l'installateur de ton système dans `release/` |
 | `npm run build:app` | Compile l'application Electron dans `dist/` (`scripts/build-app.mjs`) |
-| `npm run build:audio` | Compile `umastream-audio.exe` (Rust) |
-| `npm run fetch:cloudflared` | Télécharge `vendor/cloudflared.exe` et vérifie sa signature Cloudflare |
+| `npm run build:audio` | Compile `umastream-audio` (Rust) |
+| `npm run fetch:cloudflared` | Télécharge `vendor/cloudflared` pour ton système et le vérifie (empreinte, signature Cloudflare) |
 | `npm run share` | Version navigateur : compile le client puis lance le serveur sur le port 3000, avec un tunnel Cloudflare (lien valable partout). C'est ce que lance l'icône « UMAstream (navigateur) » |
 | `npm run dev` | Pareil sans tunnel (lien valable sur ton réseau local) |
 | `npm run build:client` | Compile `client/main.ts` en `public/app.js` (esbuild) |
 | `npm run typecheck` | Vérifie les types de tout le projet (TypeScript) |
 | `npm run shortcut` | Crée l'icône « UMAstream (navigateur) » sur le bureau (Windows) |
-| `npm run icon` | Régénère `assets/umastream.ico` à partir de `public/logo.png` (si tu changes de logo) |
+| `npm run icon` · `npm run icon:png` | Régénère `assets/umastream.ico` (Windows) · `assets/umastream.png` (macOS, Linux) à partir de `public/logo.png` |
 
-Le lanceur `UMAstream.cmd` vérifie que Node est installé, lance `npm install` si `node_modules` manque, puis
+Le lanceur `UMAstream.cmd` (Windows ; `UMAstream.sh` sous macOS / Linux) vérifie que Node est installé, lance `npm install` si `node_modules` manque, puis
 `npm run share -- --open` (`--open` ouvre le navigateur une fois le serveur et le tunnel prêts). Si l'appli tourne
 déjà, il ouvre simplement la page existante.
 
@@ -340,6 +418,25 @@ Le serveur choisit donc lui-même la meilleure adresse pour le lien généré :
 - Les pseudos sont affichés avec `textContent`, jamais `innerHTML` : un pseudo comme `<b>gras</b>` s'affiche tel
   quel, sans pouvoir injecter de code chez le streamer.
 - Seul le streamer du salon peut accepter, refuser ou expulser : le serveur le vérifie à chaque demande.
+
+### Connexions stables
+
+Un spectateur a **deux connexions** avec le streamer : la **vidéo** (WebRTC, en direct entre les deux PC) et une
+connexion de **contrôle** avec le serveur (WebSocket, via le tunnel). Les deux sont protégées contre les coupures :
+
+- **Ping toutes les 30 s.** Une fois la vidéo lancée, la connexion de contrôle ne transporte presque plus rien,
+  et le tunnel Cloudflare coupe un WebSocket inactif au bout d'environ 2 minutes (mesuré : 125 s). C'était la
+  cause des déconnexions toutes les quelques minutes. Le serveur envoie donc un ping à chaque connexion toutes les
+  30 s (le navigateur répond tout seul) ; une connexion qui ne répond plus est fermée proprement.
+- **Reconnexion automatique.** Une fois accepté, le spectateur reçoit un **jeton secret de reprise**. Si sa
+  connexion de contrôle se coupe quand même, le serveur le garde **30 s** (sans prévenir le streamer) et le
+  spectateur se reconnecte tout seul avec son jeton (1 s, 2 s, 4 s, puis toutes les 5 s) : pas de mot de passe,
+  pas de salle d'attente, et la vidéo, qui passe en direct, n'est pas coupée. Après 30 s, il est retiré et doit
+  retaper le mot de passe. Une **expulsion** (👢) annule le jeton : pas de retour possible par ce biais.
+- **Relance de la vidéo (ICE restart).** Si la connexion vidéo décroche (`failed`, ou `disconnected` pendant plus
+  de 4 s), le streamer envoie une nouvelle offre avec `iceRestart: true` : les deux navigateurs cherchent un
+  nouveau chemin réseau, **sur la même connexion** (qualité, pause, aveugle… sont conservés). Le spectateur peut
+  aussi la demander (`restart-ice`), par exemple après une reconnexion, ou jusqu'à 3 fois si elle échoue encore.
 
 ### Sécurité
 
@@ -424,27 +521,34 @@ spectateur en découle :
 
 ### Structure du code
 
+Chaque fichier a **un seul rôle** (approche SOLID) ; les fichiers « chefs d'orchestre » ne font que relier les
+morceaux.
+
 ```
-shared/messages.ts   Types des messages WebSocket (partagés client/serveur)
-server/server.ts     Serveur HTTP (fichiers du site) + signalisation WebSocket
-server/network.ts    Adresses joignables par les autres PC : IP locale et tunnel Cloudflare
-server/password.ts   Accès aux salons : hachage scrypt, limite d'essais par IP, délai après un refus
-server/limits.ts     Plafonds anti-abus : connexions par IP et au total, demandes par minute
-shared/app-bridge.ts Ce que l'application ajoute à la page (window.umastreamApp)
-client/main.ts       Code de la page : mode streamer et mode spectateur
-client/app-audio.ts  Application : panneau « Son du stream » et mélangeur
-client/app-picker.ts Application : fenêtre de choix d'écran (miniatures)
-electron/main.ts     Application : processus principal (fenêtre, serveur intégré, choix d'écran, captures audio)
-electron/preload.ts  Application : le pont entre la page et Electron
-native/audio-helper/ umastream-audio.exe (Rust) : applis audio, capture du son d'une appli, fenêtres réduites
+shared/              Ce que se partagent la page, le serveur et l'appli : messages WebSocket (messages.ts),
+                     aiguillage des messages (dispatch.ts), pont avec l'appli de bureau (app-bridge.ts)
+server/              server.ts (démarrage) · signaling.ts (connexions WebSocket) · handlers.ts (un gestionnaire
+                     par message) · rooms.ts (salons, salle d'attente, reconnexions) · keepalive.ts (ping 30 s) ·
+                     password.ts · limits.ts · network.ts (IP locale, tunnel) · static-files.ts · config.ts
+client/main.ts       Point d'entrée de la page : mode streamer ou mode spectateur
+client/core/         Outils communs : connexion au serveur (signaling.ts), WebRTC, qualités, préférences
+client/streamer/     Le streamer : capture de l'écran, connexions des spectateurs, salle d'attente, panneaux
+client/viewer/       Le spectateur : formulaire, lecteur, connexion vidéo, options, stats
+client/desktop/      Appli seulement : mélangeur du son (audio-mixer.ts), fenêtre de choix d'écran
+electron/            main.ts (fenêtre, serveur intégré) · platform.ts (différences Windows / macOS / Linux) ·
+                     native-helper.ts (lance umastream-audio) · screen-sources.ts (choix d'écran) · ipc.ts ·
+                     preload.ts (le pont entre la page et Electron)
+native/audio-helper/ umastream-audio (Rust) : main.rs (les 4 commandes) + os_windows.rs, os_macos.rs, os_linux.rs
 public/              main-page.html (servie sur "/"), style.css, logo.png, pcm-worklet.js, app.js (généré)
-assets/umastream.ico Icône de l'application et des raccourcis, générée à partir de public/logo.png
-scripts/             build-app.mjs (compile l'appli), fetch-cloudflared.ps1, make-icon.ps1, create-shortcut.ps1
-UMAstream.cmd        Lanceur de la version navigateur : dépendances + serveur + tunnel + navigateur
+assets/              umastream.ico (Windows) et umastream.png (macOS, Linux), générées à partir de public/logo.png
+scripts/             build-app.mjs (compile l'appli), fetch-cloudflared.mjs, make-icon.ps1, make-png-icon.ps1,
+                     create-shortcut.ps1
+.github/workflows/   release.yml : fabrique les installateurs des 3 systèmes sur GitHub (tag v*)
+UMAstream.cmd / .sh  Lanceurs de la version navigateur (Windows / macOS et Linux)
 ```
 
 Dossiers générés (ignorés par git) : `dist/` (appli compilée), `release/` (installateur),
-`native/audio-helper/target/` (programme Rust compilé), `vendor/` (cloudflared.exe téléchargé).
+`native/audio-helper/target/` (programme Rust compilé), `vendor/` (cloudflared téléchargé).
 
 ### Limites actuelles
 
@@ -456,8 +560,18 @@ Dossiers générés (ignorés par git) : `dist/` (appli compilée), `release/` (
   en 1080p).
 - Pas de serveur TURN : sur certains réseaux très fermés (4G, réseau d'école…), la connexion directe peut échouer.
 - Ton PC doit rester allumé avec l'appli lancée pendant le stream, et l'adresse du tunnel change à chaque lancement.
-- L'application, l'icône du bureau et le lanceur ne fonctionnent que sous Windows (ailleurs : `npm install` puis
-  `npm run share`, version navigateur).
-- Le son par application demande Windows 11 (ou Windows 10 build 20348+).
-- L'installateur n'est pas signé (une signature coûte plusieurs centaines d'euros par an) : Windows affiche un
-  avertissement à l'installation.
+- L'application existe pour Windows, macOS (Intel et Apple Silicon) et Linux 64 bits (AppImage). L'icône du bureau
+  de la version navigateur n'existe que sous Windows (ailleurs : `./UMAstream.sh`).
+- Le son par application demande Windows 11 (ou Windows 10 build 20348+), macOS 14.2+ ou PulseAudio / PipeWire.
+- Les fenêtres réduites ne sont proposées dans le choix d'écran que sous Windows (ailleurs, rouvre la fenêtre).
+- L'application n'est pas signée (une signature coûte plusieurs centaines d'euros par an chez Microsoft, 99 $ par
+  an chez Apple) : Windows et macOS affichent un avertissement à la première ouverture.
+
+## 4. Licence
+
+UMAstream est sous licence [PolyForm Noncommercial 1.0.0](LICENSE.md) : tu peux l'utiliser, le modifier et le
+partager librement **pour tout usage non commercial** (usage perso, école, association, recherche…), à condition de
+garder la licence et la mention `Copyright (c) 2026 L. Biard`. **Tout usage commercial est interdit** sans l'accord
+de l'auteur. Seul le texte anglais de [LICENSE.md](LICENSE.md) fait foi.
+
+Les programmes inclus dans UMAstream gardent leur propre licence : voir [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).

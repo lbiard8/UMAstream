@@ -17,7 +17,12 @@ export type SignalData =
   // Streamer -> spectateur : le stream est en pause (ou reprend). La connexion, elle, reste ouverte.
   | { kind: "pause"; paused: boolean }
   // Streamer -> UN spectateur : il ne reçoit plus ni image ni son (ou les retrouve)
-  | { kind: "blind"; blinded: boolean };
+  | { kind: "blind"; blinded: boolean }
+  // Spectateur -> streamer : ma connexion vidéo a décroché, relance-la (ICE restart)
+  | { kind: "restart-ice" };
+
+/** Durée pendant laquelle le serveur garde un spectateur déconnecté, le temps qu'il se reconnecte. */
+export const RESUME_GRACE_SECONDS = 30;
 
 /** Qui pourra ouvrir le lien : n'importe qui, le réseau local seulement, ou ce PC seulement. */
 export type ShareReach = "internet" | "lan" | "local";
@@ -33,6 +38,9 @@ export type ClientMessage =
   | { type: "join-answer"; viewerId: string; accept: boolean }
   // Streamer -> serveur : expulser un spectateur
   | { type: "kick"; viewerId: string }
+  // Spectateur déjà accepté dont la connexion au serveur s'est coupée : il revient avec son jeton
+  // secret, sans retaper le mot de passe ni repasser par la salle d'attente
+  | { type: "resume"; roomId: string; resumeToken: string }
   // `to` = id du spectateur (si on est le streamer) ou "streamer" (si on est spectateur)
   | { type: "signal"; to: string; data: SignalData };
 
@@ -47,7 +55,10 @@ export type BlockReason = "attempts" | "refused";
 export type ServerMessage =
   // shareBase = début du lien à partager (tunnel internet, ou IP locale) ; absent = on garde l'adresse actuelle
   | { type: "room-created"; roomId: string; shareBase?: string; reach: ShareReach }
-  | { type: "joined"; roomId: string }
+  // resumeToken : jeton secret pour se reconnecter si la connexion au serveur se coupe (voir "resume")
+  | { type: "joined"; roomId: string; resumeToken: string }
+  | { type: "resumed" } // reconnexion réussie : on retrouve sa place, la vidéo continue
+  | { type: "resume-failed" } // trop tard (plus de 30 s) ou stream terminé : il faut rejoindre à nouveau
   // Réponses à un spectateur qui veut entrer. Tant qu'il n'est pas accepté,
   // aucune connexion WebRTC n'est lancée : aucune IP n'est échangée.
   | { type: "password-required" }

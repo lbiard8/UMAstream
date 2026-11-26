@@ -2,10 +2,10 @@
 // Dans Chrome, c'est le navigateur qui affiche sa propre fenêtre ; Electron n'en a pas : on affiche
 // donc les écrans et les fenêtres sous forme de miniatures, et on renvoie l'identifiant choisi.
 
-import type { AppBridge, ScreenSource } from "../shared/app-bridge.js";
+import type { ScreenSourceApi, ScreenSource } from "../../shared/app-bridge.js";
 
 /** Ouvre la fenêtre de choix. Renvoie l'identifiant de la source choisie, ou null si annulé. */
-export async function pickScreenSource(app: AppBridge): Promise<string | null> {
+export async function pickScreenSource(app: ScreenSourceApi): Promise<string | null> {
   const dialog = document.getElementById("source-picker") as HTMLDialogElement;
   const screens = document.getElementById("picker-screens")!;
   const windows = document.getElementById("picker-windows")!;

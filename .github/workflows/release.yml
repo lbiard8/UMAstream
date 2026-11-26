@@ -1,0 +1,111 @@
+# Fabrique les installateurs Windows, macOS et Linux sur les serveurs de GitHub (gratuits pour un
+# dépôt public), puis les joint à un BROUILLON de Release : rien n'est publié tant que tu ne
+# cliques pas sur « Publish release » dans GitHub.
+#
+# Déclenchement :
+#  - en poussant un tag de version :   git tag v0.2.0   puis   git push origin v0.2.0
+#  - ou à la main (onglet Actions -> Release -> Run workflow) : les installateurs sont alors
+#    seulement téléchargeables dans le résumé du lancement (« Artifacts »), sans Release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Installateur ${{ matrix.name }}
+    strategy:
+      fail-fast: false # un système en échec n'empêche pas les autres
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+          - name: Linux
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # macOS : un programme "universel" (Intel + Apple Silicon) demande les deux cibles
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Bibliothèque PulseAudio (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libpulse-dev
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Compilation de la page et de l'appli
+        run: |
+          npm run build:client
+          npm run build:app
+
+      - name: Programme natif (son par application)
+        if: runner.os != 'macOS'
+        run: npm run build:audio
+
+      - name: Programme natif universel (macOS)
+        if: runner.os == 'macOS'
+        working-directory: native/audio-helper
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          mkdir -p target/release
+          lipo -create \
+            target/aarch64-apple-darwin/release/umastream-audio \
+            target/x86_64-apple-darwin/release/umastream-audio \
+            -output target/release/umastream-audio
+
+      - name: cloudflared (vérifié)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/fetch-cloudflared.mjs ${{ runner.os == 'macOS' && '--arch universal' || '' }}
+
+      - name: Installateur
+        run: npx electron-builder --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UMAstream-${{ matrix.name }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+          if-no-files-found: error
+
+  release:
+    name: Brouillon de Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # créer le brouillon de Release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installateurs
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: UMAstream ${{ github.ref_name }}
+          files: installateurs/*
+          body: |
+            Texte à compléter avant de publier (voir le brouillon préparé dans le projet).

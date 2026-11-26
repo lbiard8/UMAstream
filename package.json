@@ -1,23 +1,25 @@
 {
   "name": "umastream",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Partage d'écran en haute qualité dans le navigateur, via WebRTC.",
-  "author": "UMAstream",
+  "author": "L. Biard",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "main": "dist/main.js",
   "scripts": {
     "app": "npm run build:client && npm run build:app && npm run build:audio && electron .",
-    "dist": "npm run build:client && npm run build:app && npm run build:audio && npm run fetch:cloudflared && electron-builder --win",
+    "dist": "npm run build:client && npm run build:app && npm run build:audio && npm run fetch:cloudflared && electron-builder",
     "build:app": "node scripts/build-app.mjs",
     "build:audio": "cargo build --release --manifest-path native/audio-helper/Cargo.toml",
     "build:client": "esbuild client/main.ts --bundle --format=esm --sourcemap --outfile=public/app.js",
-    "fetch:cloudflared": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-cloudflared.ps1",
+    "fetch:cloudflared": "node scripts/fetch-cloudflared.mjs",
     "dev": "npm run build:client && tsx server/server.ts",
     "share": "npm run build:client && tsx server/server.ts --tunnel",
     "typecheck": "tsc",
     "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-shortcut.ps1",
-    "icon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-icon.ps1 public/logo.png assets/umastream.ico"
+    "icon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-icon.ps1 public/logo.png assets/umastream.ico",
+    "icon:png": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-png-icon.ps1 public/logo.png assets/umastream.png"
   },
   "build": {
     "appId": "com.umastream.app",
@@ -29,22 +31,74 @@
       "dist/**",
       "public/**",
       "assets/umastream.ico",
+      "assets/umastream.png",
       "package.json",
       "!**/*.map"
     ],
-    "extraResources": [
-      {
-        "from": "native/audio-helper/target/release/umastream-audio.exe",
-        "to": "bin/umastream-audio.exe"
-      },
-      {
-        "from": "vendor/cloudflared.exe",
-        "to": "bin/cloudflared.exe"
-      }
-    ],
     "win": {
       "target": "nsis",
-      "icon": "assets/umastream.ico"
+      "icon": "assets/umastream.ico",
+      "extraResources": [
+        {
+          "from": "native/audio-helper/target/release/umastream-audio.exe",
+          "to": "bin/umastream-audio.exe"
+        },
+        {
+          "from": "vendor/cloudflared.exe",
+          "to": "bin/cloudflared.exe"
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "assets/umastream.png",
+      "category": "public.app-category.video",
+      "extraResources": [
+        {
+          "from": "native/audio-helper/target/release/umastream-audio",
+          "to": "bin/umastream-audio"
+        },
+        {
+          "from": "vendor/cloudflared",
+          "to": "bin/cloudflared"
+        }
+      ],
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "x64ArchFiles": "Contents/Resources/bin/*",
+      "binaries": [
+        "Contents/Resources/bin/umastream-audio"
+      ],
+      "extendInfo": {
+        "NSAudioCaptureUsageDescription": "UMAstream envoie à tes spectateurs le son des applications que tu coches.",
+        "NSScreenCaptureUsageDescription": "UMAstream partage l'écran ou la fenêtre que tu choisis avec tes spectateurs."
+      }
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "assets/umastream.png",
+      "category": "AudioVideo",
+      "synopsis": "Partage d'écran en haute qualité",
+      "extraResources": [
+        {
+          "from": "native/audio-helper/target/release/umastream-audio",
+          "to": "bin/umastream-audio"
+        },
+        {
+          "from": "vendor/cloudflared",
+          "to": "bin/cloudflared"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
