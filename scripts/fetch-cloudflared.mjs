@@ -121,7 +121,13 @@ function verifySignature(file) {
       `$s = Get-AuthenticodeSignature -LiteralPath '${file.replace(/'/g, "''")}'; ` +
       `[pscustomobject]@{ status = [string]$s.Status; message = $s.StatusMessage; ` +
       `signer = [string]$s.SignerCertificate.Subject } | ConvertTo-Json -Compress`;
-    const output = execFileSync("powershell", ["-NoProfile", "-Command", script], { encoding: "utf8" });
+    // PIÈGE (serveurs GitHub) : les étapes y tournent dans PowerShell 7, dont la variable PSModulePath
+    // pointe vers SES modules. Héritée par Windows PowerShell 5.1 (`powershell`), elle lui fait charger
+    // la mauvaise version du module de sécurité, et Get-AuthenticodeSignature devient introuvable.
+    // Sans cette variable, PowerShell 5.1 reprend ses propres dossiers de modules.
+    const env = { ...process.env };
+    for (const name of Object.keys(env)) if (name.toLowerCase() === "psmodulepath") delete env[name];
+    const output = execFileSync("powershell", ["-NoProfile", "-Command", script], { encoding: "utf8", env });
     const { status, message, signer } = JSON.parse(output);
     const byCloudflare = /Cloudflare/.test(signer ?? "");
     if (status === "Valid" && byCloudflare) {

@@ -103,7 +103,7 @@ maintenant sur `main` :
 - **#27 macOS + Linux** (26/11/2026) : fait. Testé : Windows (installateur, appli, son) ; Linux dans WSL (capture
   par appli isolée et au bon débit, AppImage qui démarre, tunnel, choix d'écran, stream). macOS : compile seulement
   → à tester par le pote. 1er lancement du workflow : macOS et Linux OK (artefacts), Windows en échec sur la
-  signature de cloudflared (corrigé : tolérance sur GitHub Actions, actions passées en v7/v8/v3). Linux sur un vrai
+  signature de cloudflared (cause : PSModulePath hérité de PowerShell 7 ; corrigé, actions passées en v7/v8/v3). Linux sur un vrai
   bureau : image de l'écran à vérifier (WSLg donnait un aperçu 0x0).
 - Reste : relancer le workflow, tests Mac (pote) et Linux (PC de l'utilisateur), tag `v0.2.0`, publication de la
   Release, fermer #23 et #27.
@@ -152,8 +152,10 @@ généré le lien), #26 son réglable par chaque spectateur.
 - libpulse : fermer le `Context` AVANT la `Mainloop` (ordre des champs + `Drop`), sinon plantage à la sortie.
 - Mélange Linux : l'horloge ne démarre qu'au premier son reçu, sinon un retard d'environ 1 s reste jusqu'au bout.
 - cloudflared macOS et Linux ont le même nom de fichier : `vendor/cloudflared.json` dit pour quel système il est.
-- Serveurs Windows de GitHub Actions : `Get-AuthenticodeSignature` ne remonte pas toujours la chaîne de certificats
-  (racines pas à jour) → toléré là-bas seulement si le signataire est Cloudflare (l'empreinte SHA-256 reste exigée).
+- Serveurs Windows de GitHub Actions : les étapes tournent dans PowerShell 7 ; un `powershell` (5.1) lancé depuis
+  là hérite de `PSModulePath` et ne trouve plus `Get-AuthenticodeSignature` → le lancer SANS `PSModulePath`
+  (fait dans `fetch-cloudflared.mjs`). Une tolérance reste en place là-bas si seule la chaîne de certificats ne peut
+  pas être vérifiée (signataire Cloudflare exigé, empreinte SHA-256 aussi).
 - `D:` est en **exFAT** : pas de liens → rustup et le cache de Cargo n'y marchent pas (tout passe par le Linux WSL,
   dont le disque virtuel est sur D:).
 - **Xvfb** : `desktopCapturer.getSources` renvoie souvent une liste vide (faux problème) → tester sur WSLg.
