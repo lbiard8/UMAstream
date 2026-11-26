@@ -42,7 +42,7 @@ export function setupAudioPanel(app: AudioCaptureApi): AudioPanel {
       $("audio-unsupported").hidden = false;
       audioPanel.querySelector<HTMLElement>(".audio-master")!.hidden = true;
       $("audio-empty").hidden = true;
-      audioSummary.textContent = "indisponible sur ce Windows";
+      audioSummary.textContent = "indisponible sur ce système";
     };
     if (!(await app.audioSupported())) return unsupported();
     try {

@@ -25,7 +25,7 @@ export function registerIpc({ screens, native, sendToPage, openInBrowser }: IpcS
     // On ne se propose pas soi-même : ni les processus de cette appli, ni une autre appli UMAstream ouverte
     const ownPids = new Set(app.getAppMetrics().map((m) => m.pid));
     return (await native.listAudioApps()).filter(
-      (a) => !ownPids.has(a.pid) && a.exe.toLowerCase() !== "umastream.exe",
+      (a) => !ownPids.has(a.pid) && a.exe.toLowerCase().replace(/\.exe$/, "") !== "umastream",
     );
   });
 

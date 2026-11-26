@@ -3,12 +3,13 @@
 // Elle fait tourner le MÊME serveur que `npm run share` (serveur + tunnel), puis affiche la page du
 // streamer dans sa propre fenêtre. Par rapport à la version navigateur, elle ajoute :
 //  - sa propre fenêtre de choix d'écran (et donc plus de barre « … partage votre écran » de Chrome) ;
-//  - le son par application, grâce au petit programme natif umastream-audio.exe (native/audio-helper).
+//  - le son par application, grâce au petit programme natif umastream-audio (native/audio-helper).
 // Les spectateurs, eux, regardent toujours dans leur navigateur.
 
 //
 // Ce fichier crée la fenêtre et démarre le serveur ; le reste est rangé à part :
-//   native-helper.ts   le programme natif umastream-audio.exe (son par appli, fenêtres réduites)
+//   platform.ts        ce qui change entre Windows, macOS et Linux
+//   native-helper.ts   le programme natif umastream-audio (son par appli, fenêtres réduites)
 //   screen-sources.ts  la fenêtre de choix d'écran (côté Electron)
 //   ipc.ts             les services offerts à la page (window.umastreamApp)
 
@@ -18,23 +19,26 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { registerIpc } from "./ipc.js";
 import { NativeHelper } from "./native-helper.js";
+import { currentPlatform } from "./platform.js";
 import { ScreenSources } from "./screen-sources.js";
 
 // --- Emplacements des fichiers -------------------------------------------------
 // En développement (`npm run app`), tout est dans le dossier du projet.
 // Une fois installée, l'appli range ses programmes dans resources/bin (voir "extraResources").
+// Les programmes s'appellent "….exe" sous Windows, sans extension sous macOS et Linux.
 const APP_DIR = app.getAppPath();
 const BIN_DIR = app.isPackaged ? join(process.resourcesPath, "bin") : null;
+const exe = (name: string) => name + currentPlatform.exeSuffix;
 const AUDIO_HELPER = BIN_DIR
-  ? join(BIN_DIR, "umastream-audio.exe")
-  : join(APP_DIR, "native", "audio-helper", "target", "release", "umastream-audio.exe");
-const BUNDLED_CLOUDFLARED = BIN_DIR ? join(BIN_DIR, "cloudflared.exe") : join(APP_DIR, "vendor", "cloudflared.exe");
+  ? join(BIN_DIR, exe("umastream-audio"))
+  : join(APP_DIR, "native", "audio-helper", "target", "release", exe("umastream-audio"));
+const BUNDLED_CLOUDFLARED = BIN_DIR ? join(BIN_DIR, exe("cloudflared")) : join(APP_DIR, "vendor", exe("cloudflared"));
 
 // Les sons d'une page ne démarrent normalement qu'après un clic : ici, le mélangeur audio du
 // stream doit pouvoir tourner dès l'ouverture (il ne joue rien sur les haut-parleurs).
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
-const native = new NativeHelper(AUDIO_HELPER);
+const native = new NativeHelper(AUDIO_HELPER, currentPlatform);
 const screens = new ScreenSources(native);
 
 /** Premier port libre à partir de `start` (3000 est peut-être déjà pris par la version navigateur). */
@@ -75,7 +79,7 @@ async function start() {
     minWidth: 820,
     minHeight: 600,
     title: "UMAstream",
-    icon: join(APP_DIR, "assets", "umastream.ico"),
+    ...(currentPlatform.windowIcon ? { icon: join(APP_DIR, currentPlatform.windowIcon) } : {}),
     backgroundColor: "#0f1115",
     autoHideMenuBar: true,
     webPreferences: {

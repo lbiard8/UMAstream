@@ -1,10 +1,10 @@
-// Le petit programme natif umastream-audio.exe (native/audio-helper) : son par application et
+// Le petit programme natif umastream-audio (native/audio-helper, .exe sous Windows) : son par application et
 // fenêtres réduites. Ce fichier est le SEUL à savoir comment on le lance et comment il répond.
 
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { release } from "node:os";
 import type { AudioApp } from "../shared/app-bridge.js";
+import type { PlatformInfo } from "./platform.js";
 
 /** Une fenêtre réduite dans la barre des tâches. */
 export interface MinimizedWindow {
@@ -20,18 +20,14 @@ export interface WindowHelper {
   restoreWindow(hwnd: string): Promise<void>;
 }
 
-/** Le son par application exige Windows 11 (ou Windows 10 build 20348+). */
-function windowsSupportsAppAudio(): boolean {
-  if (process.platform !== "win32") return false;
-  const build = Number(release().split(".")[2] ?? 0);
-  return build >= 20348;
-}
-
 export class NativeHelper implements WindowHelper {
-  /** Captures de son en cours : pid de l'application -> programme umastream-audio.exe */
+  /** Captures de son en cours : pid de l'application -> programme umastream-audio */
   private readonly captures = new Map<number, ChildProcess>();
 
-  constructor(private readonly exePath: string) {}
+  constructor(
+    private readonly exePath: string,
+    private readonly platform: PlatformInfo,
+  ) {}
 
   private get installed() {
     return existsSync(this.exePath);
@@ -39,10 +35,10 @@ export class NativeHelper implements WindowHelper {
 
   /** Le son par application est-il possible ici ? */
   audioSupported(): boolean {
-    return windowsSupportsAppAudio() && this.installed;
+    return this.platform.appAudioSupported() && this.installed;
   }
 
-  /** Lance umastream-audio.exe avec ces arguments et renvoie ce qu'il affiche. */
+  /** Lance umastream-audio avec ces arguments et renvoie ce qu'il affiche. */
   private run(args: string[]): Promise<string> {
     return new Promise((resolve, reject) =>
       execFile(this.exePath, args, { windowsHide: true, timeout: 5000 }, (err, stdout) =>
@@ -53,7 +49,8 @@ export class NativeHelper implements WindowHelper {
 
   /** Fenêtres réduites dans la barre des tâches (vide si le programme natif est absent). */
   async listMinimizedWindows(): Promise<MinimizedWindow[]> {
-    if (process.platform !== "win32" || !this.installed) return [];
+    // Seul Windows en a besoin (ailleurs, Electron voit déjà les fenêtres réduites)
+    if (this.platform.os !== "windows" || !this.installed) return [];
     try {
       return JSON.parse(await this.run(["windows"]));
     } catch {
