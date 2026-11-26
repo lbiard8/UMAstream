@@ -97,16 +97,16 @@ Fait : #1 #2 (qualités), #3 (icône), #6 (lien internet), #7 (pause), #8 (compt
 #11 (Bun : non, gardé Node), #12 (accepter/refuser + panneau spectateurs 👁️/🙈/👢), #15 (qualité en direct),
 #16 (changer d'écran), #19 (son par application, appli Electron).
 
-En cours sur la branche `feat/23-deconnexions-frequentes`, pour la **v0.2.0** (version déjà passée à 0.2.0) :
-- **#23 déconnexions** : fait, testé, commité (ping 30 s, reconnexion par jeton, ICE restart) ; refonte SOLID et
-  licence commitées aussi.
-- **#27 macOS + Linux** (26/11/2026) : fait, **pas encore commité**. Testé : Windows (installateur, appli, son) ;
-  Linux dans WSL (capture par appli isolée et au bon débit, AppImage qui démarre, tunnel, choix d'écran, stream).
-  macOS : compile seulement (`cargo check` des 2 puces) → à tester par le pote (dmg via GitHub Actions).
-  Workflow GitHub Actions jamais lancé encore. Linux sur un vrai bureau : image de l'écran à vérifier (WSLg
-  donnait un aperçu 0x0).
-- Reste : commit, push + tag `v0.2.0` (par l'utilisateur), corrections éventuelles après les tests Mac / Linux,
-  publication de la Release, fusion dans `main`, fermer #23 et #27.
+En cours pour la **v0.2.0** (version déjà passée à 0.2.0). Tout est fusionné dans `main` (PR #28) ; on travaille
+maintenant sur `main` :
+- **#23 déconnexions** : fait, testé (ping 30 s, reconnexion par jeton, ICE restart) ; refonte SOLID et licence aussi.
+- **#27 macOS + Linux** (26/11/2026) : fait. Testé : Windows (installateur, appli, son) ; Linux dans WSL (capture
+  par appli isolée et au bon débit, AppImage qui démarre, tunnel, choix d'écran, stream). macOS : compile seulement
+  → à tester par le pote. 1er lancement du workflow : macOS et Linux OK (artefacts), Windows en échec sur la
+  signature de cloudflared (corrigé : tolérance sur GitHub Actions, actions passées en v7/v8/v3). Linux sur un vrai
+  bureau : image de l'écran à vérifier (WSLg donnait un aperçu 0x0).
+- Reste : relancer le workflow, tests Mac (pote) et Linux (PC de l'utilisateur), tag `v0.2.0`, publication de la
+  Release, fermer #23 et #27.
 
 À faire : #4 lien via Discord (idée retenue : webhook qui poste/supprime le lien, pas de bot hébergé),
 #5 durée d'hébergement, #10 masquer l'IP (relais TURN ; alternative proposée : avertissement obligatoire),
@@ -152,6 +152,8 @@ généré le lien), #26 son réglable par chaque spectateur.
 - libpulse : fermer le `Context` AVANT la `Mainloop` (ordre des champs + `Drop`), sinon plantage à la sortie.
 - Mélange Linux : l'horloge ne démarre qu'au premier son reçu, sinon un retard d'environ 1 s reste jusqu'au bout.
 - cloudflared macOS et Linux ont le même nom de fichier : `vendor/cloudflared.json` dit pour quel système il est.
+- Serveurs Windows de GitHub Actions : `Get-AuthenticodeSignature` ne remonte pas toujours la chaîne de certificats
+  (racines pas à jour) → toléré là-bas seulement si le signataire est Cloudflare (l'empreinte SHA-256 reste exigée).
 - `D:` est en **exFAT** : pas de liens → rustup et le cache de Cargo n'y marchent pas (tout passe par le Linux WSL,
   dont le disque virtuel est sur D:).
 - **Xvfb** : `desktopCapturer.getSources` renvoie souvent une liste vide (faux problème) → tester sur WSLg.

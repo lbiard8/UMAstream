@@ -116,15 +116,32 @@ try {
 /** Vérifie que le programme est signé par Cloudflare, quand ce PC sait le vérifier. */
 function verifySignature(file) {
   if (os === "windows" && process.platform === "win32") {
+    // On récupère l'état de la signature ET la raison, pour pouvoir l'afficher en cas de problème
     const script =
       `$s = Get-AuthenticodeSignature -LiteralPath '${file.replace(/'/g, "''")}'; ` +
-      `if ($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notmatch 'Cloudflare') { exit 1 }`;
-    try {
-      execFileSync("powershell", ["-NoProfile", "-Command", script], { stdio: "ignore" });
-    } catch {
-      throw new Error("Signature Windows de cloudflared invalide ou inattendue : fichier refusé");
+      `[pscustomobject]@{ status = [string]$s.Status; message = $s.StatusMessage; ` +
+      `signer = [string]$s.SignerCertificate.Subject } | ConvertTo-Json -Compress`;
+    const output = execFileSync("powershell", ["-NoProfile", "-Command", script], { encoding: "utf8" });
+    const { status, message, signer } = JSON.parse(output);
+    const byCloudflare = /Cloudflare/.test(signer ?? "");
+    if (status === "Valid" && byCloudflare) {
+      console.log("Signature vérifiée : signé par Cloudflare (Authenticode)");
+      return;
     }
-    console.log("Signature vérifiée : signé par Cloudflare (Authenticode)");
+    // Serveurs Windows de GitHub Actions : leur liste de certificats racines n'est pas mise à jour
+    // automatiquement, Windows peut alors ne pas « remonter » jusqu'à l'autorité qui a signé.
+    // Dans CE cas seulement (signataire Cloudflare, chaîne non vérifiable), on accepte avec un
+    // avertissement : l'empreinte SHA-256, déjà vérifiée plus haut, garantit que le fichier est bien
+    // celui publié par Cloudflare. Sur un PC normal, la vérification reste stricte.
+    const chainProblem = status === "UnknownError" || status === "NotTrusted";
+    if (process.env.GITHUB_ACTIONS === "true" && byCloudflare && chainProblem) {
+      console.warn(`::warning::Signature Windows de cloudflared non vérifiable sur ce serveur (${status} : ${message}).`);
+      console.warn("Signataire Cloudflare et empreinte SHA-256 correcte : fichier accepté.");
+      return;
+    }
+    throw new Error(
+      `Signature Windows de cloudflared refusée : état ${status} (${message}), signataire « ${signer || "aucun"} »`,
+    );
   } else if (os === "macos" && process.platform === "darwin") {
     execFileSync("codesign", ["--verify", "--strict", file]); // erreur si la signature est cassée
     // codesign écrit ses détails (dont le signataire) sur la sortie d'erreur, d'où le 2>&1
