@@ -6,6 +6,11 @@
   "description": "Partage d'écran en haute qualité dans le navigateur, via WebRTC.",
   "author": "L. Biard",
   "license": "PolyForm-Noncommercial-1.0.0",
+  "homepage": "https://github.com/lbiard8/UMAstream",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lbiard8/UMAstream.git"
+  },
   "main": "dist/main.js",
   "scripts": {
     "app": "npm run build:client && npm run build:app && npm run build:audio && electron .",
@@ -84,7 +89,8 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb"
       ],
       "icon": "assets/umastream.png",
       "category": "AudioVideo",
@@ -98,6 +104,22 @@
           "from": "vendor/cloudflared",
           "to": "bin/cloudflared"
         }
+      ],
+      "maintainer": "L. Biard <lbiard8@users.noreply.github.com>",
+      "executableName": "umastream"
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "libpulse0"
       ]
     },
     "nsis": {

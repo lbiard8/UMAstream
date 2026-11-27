@@ -20,8 +20,8 @@ Dépôt : `lbiard8/UMAstream` (public). Release publiée : v0.1.0 (Windows seule
 | `npm run fetch:cloudflared` | `scripts/fetch-cloudflared.mjs [--os …] [--arch x64\|arm64\|universal] [--force]` |
 | `npx tsc` | Vérifie les types (le faire après chaque modification) |
 
-Publication : tag `v*` poussé → `.github/workflows/release.yml` fabrique `.exe` (NSIS), `.dmg` universel et
-`.AppImage`, puis crée un BROUILLON de Release (l'utilisateur publie). Lancement manuel possible (Artifacts).
+Publication : tag `v*` poussé → `.github/workflows/release.yml` fabrique `.exe` (NSIS), `.dmg` universel,
+`.AppImage` et `.deb`, puis crée un BROUILLON de Release (l'utilisateur publie). Lancement manuel possible (Artifacts).
 
 Tests : lancer sur le **port 3001** (`$env:PORT='3001'`) pour ne pas gêner l'appli de l'utilisateur (port 3000).
 Appli de test en parallèle de l'appli installée : `npx electron . --remote-debugging-port=9333
@@ -129,7 +129,8 @@ généré le lien), #26 son réglable par chaque spectateur.
 - Installateurs non signés : Windows (SmartScreen : « Informations complémentaires → Exécuter quand même ») ;
   macOS signature « ad hoc » (`identity: "-"`, pas de notarisation) → « Ouvrir quand même » / `xattr -cr`.
 - Mac : `.dmg` **universel** (Intel + Apple Silicon) ; programme natif et cloudflared réunis avec `lipo` dans le
-  workflow. Linux : **AppImage** seulement. Fabrication des 3 par GitHub Actions (un .dmg exige un Mac).
+  workflow. Linux : **.deb** (recommandé : s'installe par double-clic, entrée de menu, bac à sable
+  Chromium réglé par le paquet ; dépend de libpulse0) + **AppImage** (toutes distributions). Fabrication des 3 par GitHub Actions (un .dmg exige un Mac).
 - Licence **PolyForm Noncommercial 1.0.0** (`LICENSE.md`, « Required Notice: Copyright (c) 2026 L. Biard ») : usage
   libre sauf commercial. Pas « open source » au sens OSI → pas de signature gratuite type SignPath. Pas de page de
   licence dans l'installateur (choix de l'utilisateur). Licences des composants : `THIRD_PARTY_LICENSES.md` (à mettre
@@ -160,6 +161,8 @@ généré le lien), #26 son réglable par chaque spectateur.
   dont le disque virtuel est sur D:).
 - **Xvfb** : `desktopCapturer.getSources` renvoie souvent une liste vide (faux problème) → tester sur WSLg.
 - README en fins de ligne CRLF : un remplacement par script doit en tenir compte.
+- Ubuntu récent : le gestionnaire de fichiers ne lance plus un programme (AppImage) par double-clic → d'où le
+  `.deb`. Le `.deb` exige `linux.maintainer` (adresse noreply GitHub) et `homepage` dans package.json.
 - Git Bash → WSL : préfixer `MSYS_NO_PATHCONV=1` et passer par un script `.sh` (les commandes en ligne se cassent).
 
 ## Règles de travail avec l'utilisateur

@@ -87,6 +87,7 @@ jobs:
             release/*.exe
             release/*.dmg
             release/*.AppImage
+            release/*.deb
           if-no-files-found: error
 
   release:

@@ -35,7 +35,8 @@ Le tunnel (cloudflared) est inclus dans l'application : il n'y a rien d'autre à
 |---|---|
 | Windows 10 / 11 | **`UMAstream.Setup.0.2.0.exe`** |
 | macOS 12 ou plus récent (Mac Intel et Apple Silicon) | **`UMAstream-0.2.0-universal.dmg`** |
-| Linux (PC 64 bits) | **`UMAstream-0.2.0.AppImage`** |
+| Linux Ubuntu, Debian, Mint… (PC 64 bits) | **`umastream_0.2.0_amd64.deb`** (recommandé) |
+| Autres Linux (PC 64 bits) | **`UMAstream-0.2.0.AppImage`** |
 
 Pas besoin de cloner le dépôt ni d'installer Node.js : le fichier contient tout.
 
@@ -93,6 +94,20 @@ Ce blocage n'arrive qu'au premier lancement.
 
 #### Linux
 
+**Avec le `.deb`** (Ubuntu, Debian, Linux Mint, Pop!_OS…), le plus simple :
+
+**2. Double-clic sur `umastream_0.2.0_amd64.deb`** : le Centre d'applications s'ouvre, clique sur **Installer**
+(mot de passe de ta session). Ou dans un terminal, depuis le dossier du fichier :
+
+```bash
+sudo apt install ./umastream_0.2.0_amd64.deb
+```
+
+**3. Lancer** : **UMAstream** apparaît dans le menu des applications, comme n'importe quel logiciel (tu peux
+l'épingler au dock).
+
+**Avec l'AppImage** (toutes les distributions, sans installation) :
+
 **2. Rendre le fichier exécutable** : clic droit sur `UMAstream-0.2.0.AppImage` → **Propriétés** →
 **Permissions** → coche **Autoriser l'exécution comme un programme**. Ou dans un terminal :
 
@@ -100,13 +115,14 @@ Ce blocage n'arrive qu'au premier lancement.
 chmod +x UMAstream-0.2.0.AppImage
 ```
 
-**3. Double-clic pour lancer** (ou `./UMAstream-0.2.0.AppImage` dans le terminal). Il n'y a pas
-d'installation : l'AppImage est l'appli elle-même, range-la où tu veux.
+**3. Lancer** : sur Ubuntu récent, le gestionnaire de fichiers ne lance plus un programme par double-clic ;
+lance-la depuis un terminal (`./UMAstream-0.2.0.AppImage`), ou préfère le `.deb`. L'AppImage est l'appli
+elle-même : range-la où tu veux.
 
 > **Pièges possibles**
-> - Rien ne se passe, ou une erreur parle de **FUSE** (Ubuntu 22.04 et plus récent) : installe la bibliothèque
->   manquante, puis relance : `sudo apt install libfuse2t64` (Ubuntu 24.04+) ou `sudo apt install libfuse2`
->   (Ubuntu 22.04).
+> - L'AppImage ne démarre pas, avec une erreur qui parle de **FUSE** (Ubuntu 22.04 et plus récent) : installe la
+>   bibliothèque manquante, puis relance : `sudo apt install libfuse2t64` (Ubuntu 24.04+) ou
+>   `sudo apt install libfuse2` (Ubuntu 22.04).
 > - Le **son par application** utilise PulseAudio ou PipeWire (le son par défaut d'Ubuntu, Fedora, Mint…).
 > - Sous **Wayland** (Ubuntu récent, Fedora…), Linux affiche aussi sa propre fenêtre de choix de l'écran : c'est
 >   normal, choisis l'écran ou la fenêtre à partager.
@@ -116,10 +132,10 @@ C'est prêt : tu peux [streamer ton écran](#streamer-ton-écran).
 > **Bon à savoir**
 > - **Mettre à jour** : ferme UMAstream, télécharge le nouveau fichier sur la
 >   [page des versions](https://github.com/lbiard8/UMAstream/releases/latest) et installe-le comme la première
->   fois (Windows : il remplace l'ancienne version ; macOS : remplace l'appli dans Applications ; Linux :
->   remplace l'AppImage). Tes réglages sont conservés.
+>   fois (Windows : il remplace l'ancienne version ; macOS : remplace l'appli dans Applications ; Linux : installe le nouveau
+>   `.deb`, ou remplace l'AppImage). Tes réglages sont conservés.
 > - **Désinstaller** : Windows : Paramètres → **Applications** → **UMAstream** → Désinstaller. macOS : mets
->   UMAstream (dans Applications) à la corbeille. Linux : supprime l'AppImage.
+>   UMAstream (dans Applications) à la corbeille. Linux : `sudo apt remove umastream` (paquet `.deb`), ou supprime l'AppImage.
 
 ### B. La version navigateur (moins fonctionnelle)
 
@@ -196,7 +212,7 @@ seulement : la version **universelle** est fabriquée par GitHub Actions (ci-des
    ```
 
 2. Sur GitHub, l'onglet **Actions** montre la fabrication (environ 15 minutes) : les serveurs de GitHub
-   fabriquent l'installateur Windows, le `.dmg` macOS et l'AppImage Linux.
+   fabriquent l'installateur Windows, le `.dmg` macOS, l'AppImage et le `.deb` Linux.
 3. Une fois fini, **Releases** contient un **brouillon** avec les 3 fichiers : complète le texte, puis
    **Publish release**. Le lien [`releases/latest`](https://github.com/lbiard8/UMAstream/releases/latest)
    pointe alors automatiquement vers cette nouvelle version.
@@ -560,7 +576,7 @@ Dossiers générés (ignorés par git) : `dist/` (appli compilée), `release/` (
   en 1080p).
 - Pas de serveur TURN : sur certains réseaux très fermés (4G, réseau d'école…), la connexion directe peut échouer.
 - Ton PC doit rester allumé avec l'appli lancée pendant le stream, et l'adresse du tunnel change à chaque lancement.
-- L'application existe pour Windows, macOS (Intel et Apple Silicon) et Linux 64 bits (AppImage). L'icône du bureau
+- L'application existe pour Windows, macOS (Intel et Apple Silicon) et Linux 64 bits (`.deb` et AppImage). L'icône du bureau
   de la version navigateur n'existe que sous Windows (ailleurs : `./UMAstream.sh`).
 - Le son par application demande Windows 11 (ou Windows 10 build 20348+), macOS 14.2+ ou PulseAudio / PipeWire.
 - Les fenêtres réduites ne sont proposées dans le choix d'écran que sous Windows (ailleurs, rouvre la fenêtre).
