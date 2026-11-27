@@ -179,6 +179,7 @@ export class StreamAudioMixer {
     for (const [pid, channel] of this.channels) {
       if (!seen.has(pid)) this.removeChannel(channel);
     }
+    this.sortRows();
     // Capture des applications cochées (relancée si elle s'est arrêtée sans erreur)
     for (const channel of this.channels.values()) {
       if (channel.checked && !channel.capturing && !channel.error) void this.startCapture(channel);
@@ -188,9 +189,11 @@ export class StreamAudioMixer {
   }
 
   private addChannel(app: AudioApp) {
-    // Réglages retenus pour cette application, sinon : cochée sauf si c'est une appli de vocal
+    // Réglages retenus pour cette application. Sinon : cochée seulement si elle joue du son en ce moment
+    // et que ce n'est pas une appli de vocal. Une appli silencieuse (notifications, sonneries…) n'est
+    // donc jamais envoyée dans le stream sans que le streamer l'ait choisie.
     const pref = loadJson<AppPref>(prefKey(app.exe));
-    const checked = pref ? pref.checked : !isVoiceApp(app.exe);
+    const checked = pref ? pref.checked : app.active && !isVoiceApp(app.exe);
     const volume = pref ? pref.volume : 1;
 
     const player = new AudioWorkletNode(this.context, "pcm-player", { outputChannelCount: [2] });
@@ -257,6 +260,19 @@ export class StreamAudioMixer {
       this.savePref(channel);
     });
     this.updateRow(channel);
+  }
+
+  /** Ordre du panneau : les applis qui jouent du son d'abord, puis par nom. */
+  private sortRows() {
+    const sorted = [...this.channels.values()].sort(
+      (a, b) =>
+        Number(b.app.active) - Number(a.app.active) ||
+        friendlyName(a.app.exe).localeCompare(friendlyName(b.app.exe), "fr", { sensitivity: "base" }),
+    );
+    // insertBefore() déplace une ligne déjà présente : seules celles qui ne sont pas à leur place bougent
+    sorted.forEach((channel, i) => {
+      if (this.list.children[i] !== channel.row) this.list.insertBefore(channel.row, this.list.children[i] ?? null);
+    });
   }
 
   private removeChannel(channel: Channel) {

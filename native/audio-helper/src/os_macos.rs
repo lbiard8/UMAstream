@@ -55,10 +55,24 @@ impl Platform for MacPlatform {
             }
             let running = get_property::<u32>(object, kAudioProcessPropertyIsRunningOutput).unwrap_or(0) != 0;
             let root = root_process(&system, pid as u32, same_bundle);
+            if !is_user_app(&system, root) {
+                continue; // service interne de macOS (Siri, appels, son système…) : pas une appli à streamer
+            }
             let entry = apps.entry(root).or_insert_with(|| (app_name(&system, root), false));
             entry.1 |= running;
         }
-        Ok(apps.into_iter().map(|(pid, (exe, active))| AudioApp { pid, exe, active }).collect())
+        // Une même appli peut apparaître sous plusieurs processus racines : une seule ligne par nom
+        // (on garde celle qui joue du son, sinon la première)
+        let mut by_name: BTreeMap<String, AudioApp> = BTreeMap::new();
+        for (pid, (exe, active)) in apps {
+            match by_name.get(&exe) {
+                Some(existing) if existing.active || !active => {}
+                _ => {
+                    by_name.insert(exe.clone(), AudioApp { pid, exe, active });
+                }
+            }
+        }
+        Ok(by_name.into_values().collect())
     }
 
     fn capture(&self, pid: u32, out: &mut PcmWriter) -> Result<()> {
@@ -378,6 +392,17 @@ fn same_bundle(child: &sysinfo::Process, parent: &sysinfo::Process) -> bool {
         (Some(a), Some(b)) => a == b,
         (None, None) => child.name() == parent.name(),
         _ => false,
+    }
+}
+
+/// Une "vraie" application, qu'on peut vouloir streamer : rangée dans un paquet .app, et pas dans
+/// /System/Library (où vivent les services internes de macOS : Siri, appels, son système…).
+/// Les applis d'Apple utilisables, elles, sont dans /Applications ou /System/Applications (FaceTime…).
+fn is_user_app(system: &System, pid: u32) -> bool {
+    let bundle = system.process(Pid::from_u32(pid)).and_then(|p| p.exe()).and_then(outer_bundle);
+    match bundle {
+        Some(path) => !path.starts_with("/System/Library/") && !path.starts_with("/Library/Apple/"),
+        None => false, // pas de paquet .app : un programme d'arrière-plan (avconferenced, callservicesd…)
     }
 }
 
