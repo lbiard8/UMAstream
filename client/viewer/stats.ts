@@ -28,6 +28,6 @@ export function startStats(pc: RTCPeerConnection) {
         }
       }
     });
-    if (videoText) $("stats").textContent = `${videoText} · 🔊 ${Math.round(audioKbps)} kb/s`;
+    if (videoText) $("stats").textContent = `${videoText} · son ${Math.round(audioKbps)} kb/s`;
   }, 1000);
 }

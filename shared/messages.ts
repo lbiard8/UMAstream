@@ -74,4 +74,6 @@ export type ServerMessage =
   | { type: "viewer-left"; viewerId: string }
   | { type: "signal"; from: string; data: SignalData }
   | { type: "stream-ended" }
+  // Spectateur : ce salon n'existe pas (lien faux, ou stream terminé avant son arrivée)
+  | { type: "room-not-found" }
   | { type: "error"; message: string };

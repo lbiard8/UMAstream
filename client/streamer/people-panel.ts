@@ -5,6 +5,7 @@
 // Sinon un pseudo comme "<img src=x onerror=…>" exécuterait du code chez le streamer (faille XSS).
 
 import { $ } from "../core/dom.js";
+import { icon, type IconName } from "../core/icons.js";
 import type { ViewerSummary } from "./viewer-peers.js";
 
 export interface PeopleActions {
@@ -13,10 +14,10 @@ export interface PeopleActions {
   kick(viewerId: string): void;
 }
 
-/** Petit bouton avec un émoji, et un libellé lisible au survol et par les lecteurs d'écran. */
-function iconButton(emoji: string, label: string, onClick: () => void) {
+/** Petit bouton avec une icône, et un libellé lisible au survol et par les lecteurs d'écran. */
+function iconButton(name: IconName, label: string, onClick: () => void) {
   const btn = document.createElement("button");
-  btn.textContent = emoji;
+  btn.append(icon(name));
   btn.title = label;
   btn.setAttribute("aria-label", label);
   btn.addEventListener("click", onClick);
@@ -42,19 +43,19 @@ export class PeoplePanel {
     $("pending-list").replaceChildren(
       ...pending.map(([id, name]) =>
         personRow(name, [
-          iconButton("✅", `Accepter ${name}`, () => answer(id, true)),
-          iconButton("❌", `Refuser ${name}`, () => answer(id, false)),
+          iconButton("check", `Accepter ${name}`, () => answer(id, true)),
+          iconButton("close", `Refuser ${name}`, () => answer(id, false)),
         ]),
       ),
     );
     $("viewer-list").replaceChildren(
       ...viewers.map(({ id, name, blind }) => {
         const row = personRow(name, [
-          // L'émoji montre l'ÉTAT actuel : 👁️ il voit, 🙈 il est aveugle. Un clic inverse.
-          iconButton(blind ? "🙈" : "👁️", blind ? `Rendre la vue à ${name}` : `Rendre ${name} aveugle`, () =>
+          // L'icône montre l'ÉTAT actuel : œil ouvert = il voit, œil barré = il est aveugle. Un clic inverse.
+          iconButton(blind ? "eye-off" : "eye", blind ? `Rendre la vue à ${name}` : `Rendre ${name} aveugle`, () =>
             toggleBlind(id),
           ),
-          iconButton("👢", `Expulser ${name}`, () => kick(id)),
+          iconButton("kick", `Expulser ${name}`, () => kick(id)),
         ]);
         row.classList.toggle("is-blind", blind);
         return row;

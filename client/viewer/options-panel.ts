@@ -10,7 +10,6 @@ import { isViewerQuality } from "../core/quality.js";
  * onQualityChange est appelé quand le spectateur en choisit une autre.
  */
 export function setupOptionsPanel(onQualityChange: (quality: ViewerQuality) => void): ViewerQuality {
-  $("viewer-options").hidden = false; // le bouton ⚙️ du header ne sert qu'au spectateur
 
   const optionsBtn = $("options-btn");
   const optionsPanel = $("options-panel");

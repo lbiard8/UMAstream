@@ -9,18 +9,17 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- Les icônes viennent de icons.svg (<use href="icons.svg#nom">), dessinées une seule fois pour tout le site -->
   <header>
-    <!-- Application de bureau uniquement : lien vers la version navigateur (affiché par main.ts) -->
-    <button id="browser-version-btn" class="browser-version" hidden>
-      🌐 Aller sur la version navigateur (moins fonctionnelle)
-    </button>
     <!-- alt="" : le logo est décoratif, le titre "UMAstream" est déjà lu par les lecteurs d'écran -->
-    <h1>UMA<span>stream</span></h1>
+    <h1><img class="logo" src="logo.png" alt="" width="45" height="45" />UMA<span>stream</span></h1>
     <p class="tagline">Partage ton écran en vraie qualité, sans compte, sans installation.</p>
 
-    <!-- Options du spectateur, en haut à droite de la page. Cachées en mode streamer. -->
+    <!-- Options du spectateur, en haut à droite de la page. Affichées seulement une fois dans un salon. -->
     <div id="viewer-options" class="options" hidden>
-      <button id="options-btn" aria-expanded="false" aria-controls="options-panel">⚙️ Options</button>
+      <button id="options-btn" aria-expanded="false" aria-controls="options-panel">
+        <svg class="icon" aria-hidden="true"><use href="icons.svg#sliders" /></svg><span>Options</span>
+      </button>
       <div id="options-panel" class="options-panel" hidden>
         <label for="viewer-quality">Qualité</label>
         <select id="viewer-quality">
@@ -43,34 +42,48 @@
       <div class="card">
         <label for="resolution">Résolution</label>
         <select id="resolution">
-          <option value="native">Native</option>
+          <option value="native">Native (résolution de l'écran)</option>
           <option value="1080" selected>1080p</option>
           <option value="720">720p</option>
           <option value="480">480p</option>
           <option value="360">360p</option>
         </select>
-        <label for="fps">Fps</label>
+        <label for="fps">FPS</label>
         <select id="fps">
           <option value="60" selected>60</option>
           <option value="30">30</option>
         </select>
         <label for="stream-password">Mot de passe</label>
-        <input id="stream-password" type="password" maxlength="128" autocomplete="new-password" required />
+        <span class="password-field">
+          <input id="stream-password" type="password" maxlength="128" autocomplete="new-password" required />
+          <button type="button" class="password-toggle" data-for="stream-password" aria-pressed="false"
+                  aria-label="Afficher le mot de passe" title="Afficher le mot de passe">
+            <svg class="icon" aria-hidden="true"><use href="icons.svg#eye" /></svg>
+          </button>
+        </span>
         <button id="start-btn" class="primary">Partager mon écran</button>
       </div>
 
-      <!-- Application de bureau uniquement : son par application (rempli par client/app-audio.ts) -->
+      <!-- Avant le stream : ce qui va se passer, en trois étapes (masqué une fois en direct) -->
+      <ol id="start-steps" class="steps">
+        <li><b>Choisis un mot de passe.</b> Tes spectateurs devront le taper pour entrer.</li>
+        <li><b>Clique sur « Partager mon écran »</b> et choisis l'écran ou la fenêtre à montrer.</li>
+        <li><b>Envoie le lien à tes potes</b>, et le mot de passe <b>à part</b> (en vocal, en message privé).
+          Tu acceptes chaque personne avant qu'elle voie quoi que ce soit.</li>
+      </ol>
+
+      <!-- Application de bureau uniquement : son par application (rempli par client/desktop/audio-mixer.ts) -->
       <div id="audio-panel" class="card audio-panel" hidden>
         <div class="audio-header">
-          <h2>🔊 Son du stream</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="icons.svg#volume" /></svg> Son du stream</h2>
           <span id="audio-summary" class="audio-summary"></span>
-          <button id="audio-toggle" type="button" aria-expanded="false" aria-controls="audio-body">▸ Agrandir</button>
+          <button id="audio-toggle" type="button" aria-expanded="false" aria-controls="audio-body">Agrandir</button>
         </div>
         <!-- Contenu du panneau : réduit par défaut (bouton ci-dessus), le choix est retenu -->
         <div id="audio-body" class="audio-body" hidden>
         <p class="reach">
           Coche les applications à envoyer à tes spectateurs. Ces réglages ne changent que le stream,
-          pas ce que tu entends. Les applis de vocal (Discord…) sont décochées pour éviter l'écho.
+          pas ce que tu entends. Les applis de vocal (Discord…) et celles qui ne jouent rien sont décochées.
         </p>
         <p id="audio-unsupported" class="privacy" hidden>
           Le son par application demande Windows 11, macOS 14.2 (ou plus récent) ou un Linux avec
@@ -88,34 +101,38 @@
 
       <div id="live-panel" class="card" hidden>
         <p class="live"><span class="dot"></span> <span id="live-label">En direct</span> · <span id="viewer-count">0</span> spectateur(s)</p>
-        <!-- Diagnostic de l'encodage : masqué par défaut, rempli chaque seconde par main.ts quand il est ouvert -->
+        <!-- Diagnostic de l'encodage : masqué par défaut, rempli chaque seconde quand il est ouvert -->
         <div id="streamer-stats" class="streamer-stats" hidden></div>
         <div class="share">
-          <input id="share-link" readonly />
+          <input id="share-link" readonly aria-label="Lien à partager" />
           <button id="copy-btn">Copier le lien</button>
         </div>
         <p id="reach-note" class="reach"></p>
         <p id="privacy-note" class="privacy" hidden>
-          🔒 Ne partage ce lien qu'avec des personnes de confiance : elles pourront voir ton adresse IP.
+          <svg class="icon" aria-hidden="true"><use href="icons.svg#lock" /></svg>
+          Ne partage ce lien qu'avec des personnes de confiance : elles pourront voir ton adresse IP.
         </p>
-        <p class="reach">🔑 Envoie le mot de passe à part (en vocal, en message privé), jamais avec le lien.</p>
-        <button id="pause-btn">⏸ Pause</button>
-        <button id="switch-btn">🔄 Changer d'écran</button>
-        <button id="diag-btn" aria-expanded="false" aria-controls="streamer-stats">🔧 Diagnostic</button>
-        <button id="stop-btn" class="danger">Arrêter le partage</button>
+        <p class="reach">
+          <svg class="icon" aria-hidden="true"><use href="icons.svg#key" /></svg>
+          Envoie le mot de passe à part (en vocal, en message privé), jamais avec le lien.
+        </p>
+        <button id="pause-btn"><svg class="icon" aria-hidden="true"><use href="icons.svg#pause" /></svg><span>Pause</span></button>
+        <button id="switch-btn"><svg class="icon" aria-hidden="true"><use href="icons.svg#screen" /></svg><span>Changer d'écran</span></button>
+        <button id="diag-btn" aria-expanded="false" aria-controls="streamer-stats"><svg class="icon" aria-hidden="true"><use href="icons.svg#pulse" /></svg><span>Diagnostic</span></button>
+        <button id="stop-btn" class="danger"><svg class="icon" aria-hidden="true"><use href="icons.svg#stop" /></svg><span>Arrêter le partage</span></button>
       </div>
 
       <video id="preview" autoplay muted playsinline hidden></video>
       </div>
 
       <!-- Colonne de droite : gestion des spectateurs (affichée une fois le stream lancé).
-           Les listes sont remplies par main.ts. -->
+           Les listes sont remplies par client/streamer/people-panel.ts. -->
       <aside id="people-panel" class="people-panel card" hidden>
-        <h2>⏳ En attente (<span id="pending-count">0</span>)</h2>
+        <h2><svg class="icon" aria-hidden="true"><use href="icons.svg#clock" /></svg> En attente (<span id="pending-count">0</span>)</h2>
         <ul id="pending-list" class="people"></ul>
         <p class="people-empty" data-for="pending-list">Personne pour l'instant</p>
 
-        <h2>👥 Spectateurs (<span id="watching-count">0</span>)</h2>
+        <h2><svg class="icon" aria-hidden="true"><use href="icons.svg#users" /></svg> Spectateurs (<span id="watching-count">0</span>)</h2>
         <ul id="viewer-list" class="people"></ul>
         <p class="people-empty" data-for="viewer-list">Personne pour l'instant</p>
 
@@ -130,10 +147,25 @@
         <label for="viewer-name">Pseudo</label>
         <input id="viewer-name" autocomplete="nickname" required />
         <label for="viewer-password">Mot de passe du stream</label>
-        <input id="viewer-password" type="password" maxlength="128" autocomplete="off" required />
+        <span class="password-field">
+          <input id="viewer-password" type="password" maxlength="128" autocomplete="off" required />
+          <button type="button" class="password-toggle" data-for="viewer-password" aria-pressed="false"
+                  aria-label="Afficher le mot de passe" title="Afficher le mot de passe">
+            <svg class="icon" aria-hidden="true"><use href="icons.svg#eye" /></svg>
+          </button>
+        </span>
         <button id="password-btn" type="submit" class="primary">Rejoindre</button>
         <p id="password-error" class="password-error"></p>
       </form>
+
+      <!-- Impasse (salon introuvable, stream terminé) : on explique quoi faire, au lieu d'une simple ligne rouge -->
+      <div id="viewer-notice" class="card notice" hidden>
+        <h2 id="viewer-notice-title"></h2>
+        <p id="viewer-notice-text" class="reach"></p>
+        <button id="retry-btn" type="button" class="primary">
+          <svg class="icon" aria-hidden="true"><use href="icons.svg#refresh" /></svg><span>Réessayer</span>
+        </button>
+      </div>
 
       <!-- Lecteur : caché jusqu'à l'entrée dans le salon -->
       <div id="player" class="player" hidden>
@@ -143,19 +175,26 @@
           <video id="remote" autoplay muted playsinline></video>
           <span id="stats" class="stats" hidden></span>
           <!-- Bandeau par-dessus la dernière image : pause du stream, ou spectateur rendu aveugle -->
-          <div id="video-banner" class="video-banner" hidden>⏸ Stream en pause</div>
+          <div id="video-banner" class="video-banner" hidden></div>
         </div>
         <div class="controls">
-          <button id="unmute-btn">🔊 Activer le son</button>
-          <button id="fullscreen-btn">⛶ Plein écran</button>
+          <button id="unmute-btn"><svg class="icon" aria-hidden="true"><use href="icons.svg#volume" /></svg><span>Activer le son</span></button>
+          <button id="fullscreen-btn"><svg class="icon" aria-hidden="true"><use href="icons.svg#maximize" /></svg><span>Plein écran</span></button>
         </div>
       </div>
     </section>
 
     <p id="status" class="status"></p>
+
+    <!-- Application de bureau uniquement : lien discret vers la version navigateur (affiché par streamer-mode.ts) -->
+    <p class="browser-version">
+      <button id="browser-version-btn" type="button" class="link" hidden>
+        <svg class="icon" aria-hidden="true"><use href="icons.svg#globe" /></svg><span>Ouvrir la version navigateur (moins complète)</span>
+      </button>
+    </p>
   </main>
 
-  <!-- Application de bureau uniquement : notre fenêtre de choix d'écran (remplie par client/app-picker.ts) -->
+  <!-- Application de bureau uniquement : notre fenêtre de choix d'écran (remplie par client/desktop/screen-picker.ts) -->
   <dialog id="source-picker" class="source-picker">
     <h2>Que veux-tu partager ?</h2>
     <h3>Écrans</h3>

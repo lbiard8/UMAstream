@@ -53,10 +53,13 @@ server/handlers.ts       Un gestionnaire par message (create-room, join-room, jo
 server/rooms.ts          RoomRegistry : salons, salle d'attente, acceptés, jetons de reprise, grâce 30 s
 server/keepalive.ts      Ping 30 s (Cloudflare coupe à ~125 s)
 server/client-ip.ts      Vraie IP (cf-connecting-ip si loopback), isFromThisPc
+server/origin.ts         Liste fermée des origines autorisées (localhost, 127.0.0.1, [::1], IP locale, tunnel) : un
+                         autre site ouvert dans le navigateur ne peut plus se connecter (sans en-tête Origin = accepté)
 server/send.ts · open-browser.ts · network.ts (IP locale + cloudflared) · password.ts (scrypt) · limits.ts
 
 client/main.ts           Point d'entrée : ?room= -> viewer, sinon streamer
 client/core/             dom ($, setStatus) · prefs (localStorage) · quality (résolutions, presets) ·
+                         icons (icon(), setIconText() -> public/icons.svg) · password-toggle (boutons œil) ·
                          webrtc (RTC_CONFIG, highQualityOpus, applySignal) · signaling (SignalingClient :
                          file d'attente, envoi protégé, reconnexion 1/2/4/5 s) · errors (ShareError)
 client/streamer/         streamer-mode (orchestre) · screen-capture (CaptureSource navigateur | appli, ScreenCapture :
@@ -64,7 +67,8 @@ client/streamer/         streamer-mode (orchestre) · screen-capture (CaptureSou
                          spectateur, pause, aveugle, qualité, ICE restart) · waiting-room · people-panel (affichage
                          seul) · live-panel (lien, pause) · quality-menus · audio-panel (appli) · diagnostics
 client/viewer/           viewer-mode (orchestre) · join-form · player (vidéo, son, bandeau) · viewer-connection
-                         (RTCPeerConnection + demandes de relance) · options-panel (⚙️) · stats
+                         (RTCPeerConnection + demandes de relance) · options-panel (affiché seulement dans un salon) · stats ·
+                         notice (carte « salon introuvable » / « stream terminé » + Réessayer)
 client/desktop/          Appli seulement : audio-mixer (mélangeur, AudioWorklet public/pcm-worklet.js ; listes des
                          applis de vocal / noms lisibles pour les 3 systèmes) · screen-picker (choix d'écran)
 
@@ -79,7 +83,8 @@ native/audio-helper/     umastream-audio (Rust) : main.rs = les 4 commandes + tr
                          os_macos.rs (Core Audio process taps 14.2+, appareil agrégé privé, rééchantillonnage 48 kHz,
                          regroupement par paquet .app) ; os_linux.rs (libpulse : monitor stream de chaque sink input
                          de l'appli, mélange à l'horloge, nouveaux flux suivis par abonnement)
-public/                  main-page.html (servie sur "/"), style.css, logo.png, pcm-worklet.js, app.js (généré)
+public/                  main-page.html (servie sur "/"), style.css, logo.png, icons.svg (sprite d'icônes maison,
+                         remplace les émojis), pcm-worklet.js, app.js (généré)
 assets/                  umastream.ico (Windows), umastream.png 512 px (macOS -> .icns, Linux)
 scripts/                 build-app.mjs (esbuild), fetch-cloudflared.mjs (3 systèmes, empreinte GitHub + signature
                          Authenticode / Apple), make-icon.ps1, make-png-icon.ps1, create-shortcut.ps1
@@ -105,6 +110,11 @@ maintenant sur `main` :
   → à tester par le pote. 1er lancement du workflow : macOS et Linux OK (artefacts), Windows en échec sur la
   signature de cloudflared (cause : PSModulePath hérité de PowerShell 7 ; corrigé, actions passées en v7/v8/v3). Linux sur un vrai
   bureau : image de l'écran à vérifier (WSLg donnait un aperçu 0x0).
+- **Audit Mac** (claude du pote, 27/11/2026) traité : panneau son (Mac : vraies applis seulement ; partout :
+  silencieuses décochées, celles qui jouent en tête), sécurité (origine des WebSockets, filtre de liens exact,
+  plus d'`app-update.yml`), accueil (logo, 3 étapes, lien « version navigateur » en bas), carte d'impasse du
+  spectateur, finitions (œil mot de passe, FPS, focus, cases 18 px), icônes SVG à la place des émojis.
+  Écarté pour plus tard : TURN (#10), signature Apple (99 $/an).
 - Reste : relancer le workflow, tests Mac (pote) et Linux (PC de l'utilisateur), tag `v0.2.0`, publication de la
   Release, fermer #23 et #27.
 
@@ -124,7 +134,12 @@ généré le lien), #26 son réglable par chaque spectateur.
 - Linux : écoute des flux (monitor stream) plutôt que déplacer l'appli vers un faux périphérique : ce que
   l'utilisateur entend ne change pas. macOS : tap `Unmuted` + `private`.
 - Fenêtres réduites proposées seulement sous Windows (ailleurs Electron les voit, ou il faut les rouvrir).
-- Applis de vocal décochées par défaut (Discord…) pour éviter l'écho chez les spectateurs.
+- Applis de vocal décochées par défaut (Discord…) pour éviter l'écho chez les spectateurs ; une appli qui ne joue
+  rien quand elle apparaît est décochée aussi (pas de sonnerie / notification envoyée par surprise).
+- Origine des WebSockets en liste FERMÉE (pas « même hôte que la requête ») : résiste au DNS rebinding.
+- Icônes : sprite SVG dessiné pour le projet (pas de bibliothèque -> pas de licence en plus).
+- `"publish": null` dans la config electron-builder : pas de mise à jour automatique, donc pas d'`app-update.yml`.
+- Spectateur : message `room-not-found` dédié (au lieu d'un `error` en texte) -> carte avec Réessayer.
 - Le son du spectateur démarre activé (le clic « Rejoindre » autorise la lecture avec son).
 - Installateurs non signés : Windows (SmartScreen : « Informations complémentaires → Exécuter quand même ») ;
   macOS signature « ad hoc » (`identity: "-"`, pas de notarisation) → « Ouvrir quand même » / `xattr -cr`.

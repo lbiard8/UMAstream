@@ -2,8 +2,11 @@
 //  - streamer   : pas de ?room= dans l'URL -> on capture l'écran et on crée un salon (streamer/)
 //  - spectateur : URL avec ?room=xxxx      -> on rejoint le salon et on affiche la vidéo (viewer/)
 
+import { setupPasswordToggles } from "./core/password-toggle.js";
 import { startStreamerMode } from "./streamer/streamer-mode.js";
 import { startViewerMode } from "./viewer/viewer-mode.js";
+
+setupPasswordToggles(); // boutons « œil » des mots de passe (les deux modes en ont un)
 
 const roomId = new URLSearchParams(location.search).get("room");
 if (roomId) startViewerMode(roomId);

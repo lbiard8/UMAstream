@@ -55,6 +55,34 @@ select, input, button {
 
 button { cursor: pointer; }
 button:hover { border-color: var(--accent); }
+/* Bouton avec une icône : l'icône et le texte alignés */
+button:has(> .icon) { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Icônes (public/icons.svg) : même couleur que le texte, à sa taille */
+.icon {
+  width: 1.15em; height: 1.15em; flex-shrink: 0; vertical-align: -0.2em;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* Icône + texte hors d'un bouton (lien internet, bandeau…) : un petit espace entre les deux */
+:not(button) > .icon + span { margin-left: 0.35em; }
+
+/* Navigation au clavier : on voit toujours où l'on est */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Cases à cocher : plus grandes (13 px par défaut, difficiles à viser) */
+input[type="checkbox"] { width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--accent); cursor: pointer; }
+
+/* Mot de passe + bouton pour l'afficher, collés */
+.password-field { display: inline-flex; align-items: stretch; }
+.password-field input { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.password-toggle { border-left: none; border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 0 10px; color: var(--muted); }
+.password-toggle[aria-pressed="true"] { color: var(--text); }
+
+/* Lien discret (version navigateur), sous la page */
+button.link { background: none; border: none; padding: 4px; color: var(--muted); font-size: 0.85rem; }
+button.link:hover { color: var(--text); text-decoration: underline; }
+.browser-version { text-align: center; margin: 24px 0 0; }
 button.primary { background: var(--accent); border-color: var(--accent); font-weight: 600; }
 button.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
 
@@ -149,16 +177,12 @@ header { position: relative; }
 }
 .people .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .people li.is-blind .name { color: var(--muted); }
-.people button { padding: 4px 8px; font-size: 1rem; line-height: 1; }
+.people button { padding: 5px 7px; font-size: 1rem; line-height: 1; }
+.people h2 .icon, .people-panel h2 .icon, .audio-panel h2 .icon { margin-right: 4px; }
 .people-empty { margin: 0; color: var(--muted); font-size: 0.85rem; }
 
 /* --- Application de bureau --- */
 
-/* Lien vers la version navigateur, en haut à gauche de la page */
-.browser-version { position: absolute; top: 16px; left: 16px; font-size: 0.85rem; }
-@media (max-width: 600px) {
-  header:has(.browser-version:not([hidden])) { padding-top: 68px; }
-}
 
 /* Panneau "Son du stream" */
 .audio-panel { flex-direction: column; align-items: stretch; }
@@ -176,6 +200,8 @@ header { position: relative; }
 .audio-list li.is-off { opacity: 0.55; }
 .audio-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .audio-tag { font-size: 0.75rem; color: var(--muted); }
+.audio-tag .icon, .audio-status .icon { vertical-align: -0.15em; }
+.audio-status { color: #f5a524; }
 .audio-value { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; text-align: right; }
 .audio-meter { height: 6px; border-radius: 3px; background: #15181f; overflow: hidden; }
 .audio-meter > span { display: block; height: 100%; width: 0; background: #3dd68c; transition: width 0.1s linear; }
@@ -197,6 +223,18 @@ input[type="range"] { padding: 0; accent-color: var(--accent); }
 /* Fenêtre réduite : l'icône du programme, centrée et en petit, à la place de l'aperçu */
 .picker-tile.is-minimized img { object-fit: none; background: #15181f; }
 .picker-badge { font-size: 0.75rem; color: var(--muted); }
+
+/* Avant le stream : les trois étapes (masquées une fois en direct) */
+.steps {
+  margin: 0 0 16px; padding: 14px 16px 14px 36px; color: var(--muted);
+  border: 1px dashed var(--border); border-radius: 12px; line-height: 1.6;
+}
+.steps b { color: var(--text); font-weight: 600; }
+.streamer-layout.is-live .steps { display: none; }
+
+/* Spectateur : carte « salon introuvable » / « stream terminé », avec un bouton Réessayer */
+.notice { flex-direction: column; align-items: flex-start; gap: 10px; max-width: 520px; margin: 24px auto; }
+.notice h2 { margin: 0; font-size: 1.15rem; }
 
 .status { color: var(--muted); text-align: center; }
 .status.error { color: var(--danger); }

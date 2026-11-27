@@ -12,6 +12,7 @@
 // Les applications de vocal (Discord…) sont décochées par défaut : tes potes ne s'entendent pas en écho.
 
 import type { AudioCaptureApi, AudioApp } from "../../shared/app-bridge.js";
+import { icon } from "../core/icons.js";
 
 /**
  * Applications de vocal : décochées par défaut (nom de l'exécutable sans ".exe", en minuscules).
@@ -216,7 +217,7 @@ export class StreamAudioMixer {
     if (isVoiceApp(app.exe)) {
       const tag = document.createElement("span");
       tag.className = "audio-tag";
-      tag.textContent = "🎙️ vocal";
+      tag.append(icon("mic"), " vocal");
       tag.title = "Application de vocal : décochée par défaut pour éviter l'écho chez tes spectateurs";
       name.append(" ", tag);
     }
@@ -307,7 +308,7 @@ export class StreamAudioMixer {
 
   private updateRow(channel: Channel) {
     channel.row.classList.toggle("is-off", !channel.checked);
-    channel.status.textContent = channel.error ? "⚠️" : "";
+    channel.status.replaceChildren(...(channel.error ? [icon("alert")] : []));
     channel.status.title = channel.error ? `Capture impossible : ${channel.error}` : "";
   }
 

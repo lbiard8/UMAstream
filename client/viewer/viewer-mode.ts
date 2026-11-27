@@ -4,13 +4,15 @@
 //   JoinForm          le formulaire pseudo + mot de passe
 //   Player            la vidéo, le son, le bandeau pause / aveugle
 //   ViewerConnection  la connexion vidéo avec le streamer (et sa relance)
-//   options-panel     le panneau ⚙️ (qualité, stats)
+//   options-panel     le panneau Options (qualité, stats), affiché seulement dans un salon
+//   Notice            la carte « impasse » (salon introuvable, stream terminé)
 //   SignalingClient   la connexion au serveur, avec reconnexion automatique
 
 import type { ViewerQuality } from "../../shared/messages.js";
 import { $, currentStatus, setStatus } from "../core/dom.js";
 import { SignalingClient, type SendMessage } from "../core/signaling.js";
 import { JoinForm } from "./join-form.js";
+import { Notice } from "./notice.js";
 import { setupOptionsPanel } from "./options-panel.js";
 import { Player } from "./player.js";
 import { startStats } from "./stats.js";
@@ -26,6 +28,9 @@ export function startViewerMode(roomId: string) {
   const player = new Player();
   const connection = new ViewerConnection(send, (stream) => player.attach(stream));
   const form = new JoinForm((name, password) => send({ type: "join-room", roomId, password, name }));
+  const notice = new Notice();
+  // Le bouton Options ne sert qu'une fois dans le salon (rien à régler avant)
+  const showOptions = (visible: boolean) => ($("viewer-options").hidden = !visible);
   let quality = setupOptionsPanel((preset) => {
     // Changement de qualité : on prévient le streamer tout de suite
     quality = preset;
@@ -52,8 +57,8 @@ export function startViewerMode(roomId: string) {
     onLost: () =>
       setStatus(
         resumeToken
-          ? "⚠️ Connexion au serveur perdue, reconnexion… (la vidéo continue si elle passe encore)"
-          : "⚠️ Connexion au serveur perdue, reconnexion…",
+          ? "Connexion au serveur perdue, reconnexion… (la vidéo continue si elle passe encore)"
+          : "Connexion au serveur perdue, reconnexion…",
         true,
       ),
     handlers: {
@@ -67,7 +72,7 @@ export function startViewerMode(roomId: string) {
       // Bon mot de passe : on attend que le streamer clique sur Accepter
       "waiting-approval": () => {
         form.hide();
-        setStatus("⏳ En attente de l'accord du streamer…");
+        setStatus("En attente de l'accord du streamer…");
       },
       "join-refused": () => {
         form.lock();
@@ -77,7 +82,8 @@ export function startViewerMode(roomId: string) {
       kicked: () => {
         connection.close();
         player.hide();
-        setStatus("👢 Tu as été expulsé du stream.", true);
+        showOptions(false);
+        setStatus("Tu as été expulsé du stream.", true);
         signaling.stopReconnecting();
       },
       // Accepté par le streamer : on cache le formulaire et on affiche le lecteur
@@ -85,14 +91,15 @@ export function startViewerMode(roomId: string) {
         resumeToken = msg.resumeToken;
         form.hide();
         player.show();
+        showOptions(true);
         setStatus("En attente du flux vidéo…");
       },
       // Reconnecté au serveur : on a retrouvé notre place. Si la vidéo a décroché entre-temps,
       // on demande au streamer de la relancer.
       resumed: () => {
-        setStatus("✅ Reconnecté.");
+        setStatus("Reconnecté.");
         setTimeout(() => {
-          if (currentStatus() === "✅ Reconnecté.") setStatus("");
+          if (currentStatus() === "Reconnecté.") setStatus("");
         }, 3000);
         if (connection.isDown) connection.requestIceRestart();
       },
@@ -101,6 +108,7 @@ export function startViewerMode(roomId: string) {
         resumeToken = null;
         connection.reset();
         player.hide();
+        showOptions(false);
         form.reconnectionTooLate();
         send({ type: "join-room", roomId });
       },
@@ -124,9 +132,23 @@ export function startViewerMode(roomId: string) {
         }
       },
       "stream-ended": () => {
-        setStatus("Le stream est terminé.");
         connection.close();
-        player.clear();
+        player.hide();
+        form.hide();
+        showOptions(false);
+        notice.show(
+          "Le stream est terminé",
+          "Le streamer a arrêté de partager son écran. S'il relance un stream, il t'enverra un nouveau lien (ou clique sur Réessayer s'il a relancé le même).",
+        );
+        signaling.stopReconnecting();
+      },
+      // Lien faux, ou stream terminé : rien à faire ici, sauf demander un nouveau lien
+      "room-not-found": () => {
+        form.hide();
+        notice.show(
+          "Ce salon n'existe pas",
+          "Le lien est peut-être incomplet, ou le stream est terminé. Demande un nouveau lien au streamer, puis ouvre-le.",
+        );
         signaling.stopReconnecting();
       },
       error: (msg) => {

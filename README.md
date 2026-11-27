@@ -229,7 +229,7 @@ téléchargeables en bas du résumé du lancement (« Artifacts »).
 - **Application** : double-clic sur l'icône **UMAstream**. La fenêtre s'ouvre tout de suite sur « Démarrage
   d'UMAstream… », puis la page s'affiche une fois le lien internet prêt (quelques secondes). Relancer l'icône
   alors qu'elle est ouverte ramène simplement la fenêtre au premier plan.
-  En haut à gauche, **🌐 Aller sur la version navigateur** ouvre la même page dans ton navigateur.
+  Tout en bas, le lien **Ouvrir la version navigateur** ouvre la même page dans ton navigateur.
 - **Version navigateur** : double-clic sur **UMAstream (navigateur)**. Le navigateur s'ouvre sur
   `http://localhost:3000` ; une fenêtre de terminal s'ouvre aussi, réduite dans la barre des tâches
   (`UMAstream.cmd`, à la racine du projet, fait la même chose).
@@ -243,38 +243,38 @@ téléchargeables en bas du résumé du lancement (« Artifacts »).
      barre des tâches apparaissent avec leur icône et la mention « réduite » : UMAstream les rouvre (sans les passer
      devant) pour les partager, car Windows ne peut pas capturer une fenêtre réduite (sous macOS et Linux, rouvre
      la fenêtre toi-même avant de la choisir). Le son se règle dans le
-     panneau **🔊 Son du stream** (voir ci-dessous) ;
+     panneau **Son du stream** (voir ci-dessous) ;
    - **version navigateur** : choisis dans la fenêtre de Chrome. Pour le son, coche « Partager l'audio »
      (écran entier ou onglet seulement : c'est alors tout le son du PC, Discord compris).
 4. Clique sur **Copier le lien** et envoie-le à tes potes. Vérifie que la note sous le lien est
-   (« 🌍 Lien accessible depuis n'importe où »).
+   (« Lien accessible depuis n'importe où »).
 5. Envoie le **mot de passe à part** (en vocal, en message privé), jamais avec le lien.
-6. Quand quelqu'un demande à entrer, il apparaît à droite dans **⏳ En attente** : clique sur ✅ pour l'accepter.
+6. Quand quelqu'un demande à entrer, il apparaît à droite dans **En attente** : clique sur ✓ pour l'accepter.
 
 ### Pendant le stream
 
 | Bouton | Effet |
 |---|---|
 | Menus **Résolution / Fps** | Changent la qualité en direct, sans couper |
-| **⏸ Pause** / **▶ Reprendre** | Fige l'image chez les spectateurs, sans les déconnecter |
-| **🔄 Changer d'écran** | Passe à un autre écran ou une autre fenêtre (ou un onglet, dans la version navigateur), sans couper |
-| **🔧 Diagnostic** | Affiche ce que l'encodeur envoie vraiment (utile si ça saccade) |
+| **Pause** / **Reprendre** | Fige l'image chez les spectateurs, sans les déconnecter |
+| **Changer d'écran** | Passe à un autre écran ou une autre fenêtre (ou un onglet, dans la version navigateur), sans couper |
+| **Diagnostic** | Affiche ce que l'encodeur envoie vraiment (utile si ça saccade) |
 | **Arrêter le partage** | Termine le stream |
 
 Dans le panneau de droite (sous le reste sur petit écran) :
 
 | Liste | Bouton | Effet |
 |---|---|---|
-| ⏳ En attente | ✅ / ❌ | Accepter / refuser la personne (refusée = 5 minutes avant de pouvoir redemander) |
-| 👥 Spectateurs | 👁️ / 🙈 | Il voit / il est aveugle (plus ni image ni son pour lui seul). Un clic inverse |
-| 👥 Spectateurs | 👢 | L'expulser (il peut refaire une demande) |
+| En attente | ✓ / ✕ | Accepter / refuser la personne (refusée = 5 minutes avant de pouvoir redemander) |
+| Spectateurs | œil / œil barré | Il voit / il est aveugle (plus ni image ni son pour lui seul). Un clic inverse |
+| Spectateurs | porte (sortie) | L'expulser (il peut refaire une demande) |
 | | ☐ Accepter automatiquement | Toute personne qui a le bon mot de passe entre directement |
 
 ### Le son du stream (application : Windows 11, macOS 14.2+, Linux)
 
-Le panneau **🔊 Son du stream** liste les applications qui ont du son (comme le mélangeur de volume du système).
+Le panneau **Son du stream** liste les applications qui ont du son (comme le mélangeur de volume du système).
 Il est **réduit par défaut** : son en-tête affiche un résumé (« 2 applis envoyées sur 4 ») et le bouton
-**▸ Agrandir / ▾ Réduire** l'ouvre ou le ferme (le choix est retenu).
+**Agrandir / Réduire** l'ouvre ou le ferme (le choix est retenu).
 
 | Élément | Effet |
 |---|---|
@@ -284,7 +284,10 @@ Il est **réduit par défaut** : son en-tête affiche un résumé (« 2 applis e
 | Volume général | Le volume de tout le son du stream |
 
 - **Ces réglages ne touchent que le stream** : ce que tu entends toi-même ne change pas.
-- **Les applis de vocal** (Discord, Teams, TeamSpeak, Zoom…, marquées 🎙️ vocal) sont **décochées par défaut** :
+- **Une appli qui ne joue rien** quand elle apparaît est **décochée** (pas de notification ou de sonnerie
+  envoyée par surprise) ; celles qui jouent du son sont en tête de liste. Sous macOS, seules les vraies applis
+  sont listées (pas les services internes du système).
+- **Les applis de vocal** (Discord, Teams, TeamSpeak, Zoom…, marquées « vocal » avec un micro) sont **décochées par défaut** :
   si tu es en vocal avec tes spectateurs, ils ne s'entendent pas en écho dans le stream.
 - Une application lancée pendant le stream apparaît toute seule (cochée, sauf si c'est une appli de vocal).
 - Tes choix (case, volume) sont retenus pour chaque application.
@@ -296,11 +299,11 @@ Il est **réduit par défaut** : son en-tête affiche un résumé (« 2 applis e
 1. Ouvre le lien reçu (ordinateur ou téléphone).
 2. Tape ton **pseudo** et le **mot de passe**, puis attends que le streamer t'accepte.
 3. **Le son est activé d'office** : le clic sur « Rejoindre » suffit au navigateur pour l'autoriser. Le bouton
-   **🔇 Couper le son** le coupe (et **🔊 Activer le son** le remet, si un navigateur strict l'a refusé au départ).
-4. **⚙️ Options**, en haut à droite : choisis ta **qualité** (baisse-la si ta connexion rame) et affiche les
-   **stats** si tu veux voir la résolution, les fps et le débit reçus (image, et son en 🔊 kb/s).
+   **Couper le son** le coupe (et **Activer le son** le remet, si un navigateur strict l'a refusé au départ).
+4. **Options**, en haut à droite (une fois dans le salon) : choisis ta **qualité** (baisse-la si ta connexion rame) et affiche les
+   **stats** si tu veux voir la résolution, les fps et le débit reçus (image, et son en kb/s).
 5. Si ta connexion saute (Wi-Fi, changement de réseau…), **pas besoin de recharger la page** : elle se reconnecte
-   toute seule (« ⚠️ Connexion au serveur perdue, reconnexion… » puis « ✅ Reconnecté »), sans retaper le mot de
+   toute seule (« Connexion au serveur perdue, reconnexion… » puis « Reconnecté »), sans retaper le mot de
    passe, tant que la coupure dure moins de 30 secondes. Au-delà, il faut retaper le mot de passe.
 
 ### Arrêter l'appli
@@ -317,7 +320,7 @@ Pense à le faire quand tu ne streames pas.
 - **Le lien change à chaque lancement** de l'appli : renvoie-le à chaque fois.
 - **Environ 2 à 4 spectateurs en 1080p**, selon ta connexion montante.
 - **Attention à ce que tu montres** : notifications, mots de passe, e-mails… Partage une fenêtre plutôt que
-  l'écran entier, active « Ne pas déranger » (Windows, macOS ou Linux), et utilise ⏸ Pause avant d'ouvrir quelque chose de privé.
+  l'écran entier, active « Ne pas déranger » (Windows, macOS ou Linux), et utilise Pause avant d'ouvrir quelque chose de privé.
 - Sur certains réseaux très fermés (école, entreprise, certaines 4G), la vidéo peut ne pas passer.
 - Le son par application demande **Windows 11** (ou Windows 10 build 20348+), **macOS 14.2** ou plus récent, ou
   un **Linux avec PulseAudio / PipeWire**. Sinon, l'application fonctionne, mais le stream part sans son (le
@@ -429,7 +432,7 @@ Le serveur choisit donc lui-même la meilleure adresse pour le lien généré :
 - Une demande sans réponse attend indéfiniment, et disparaît si le spectateur ferme la page.
 - Cocher **Accepter automatiquement** accepte aussi ceux qui attendent déjà.
 - **Aveugle** : `replaceTrack(null)` sur la connexion de ce spectateur seulement. Il reste connecté et voit un
-  bandeau « 🙈 Le streamer a masqué l'image pour toi ».
+  bandeau « Le streamer a masqué l'image pour toi ».
 - **Le pseudo n'est pas vérifié** : n'importe qui peut taper celui d'un pote. En cas de doute, demande-lui en vocal.
 - Les pseudos sont affichés avec `textContent`, jamais `innerHTML` : un pseudo comme `<b>gras</b>` s'affiche tel
   quel, sans pouvoir injecter de code chez le streamer.
@@ -448,7 +451,7 @@ connexion de **contrôle** avec le serveur (WebSocket, via le tunnel). Les deux 
   connexion de contrôle se coupe quand même, le serveur le garde **30 s** (sans prévenir le streamer) et le
   spectateur se reconnecte tout seul avec son jeton (1 s, 2 s, 4 s, puis toutes les 5 s) : pas de mot de passe,
   pas de salle d'attente, et la vidéo, qui passe en direct, n'est pas coupée. Après 30 s, il est retiré et doit
-  retaper le mot de passe. Une **expulsion** (👢) annule le jeton : pas de retour possible par ce biais.
+  retaper le mot de passe. Une **expulsion** annule le jeton : pas de retour possible par ce biais.
 - **Relance de la vidéo (ICE restart).** Si la connexion vidéo décroche (`failed`, ou `disconnected` pendant plus
   de 4 s), le streamer envoie une nouvelle offre avec `iceRestart: true` : les deux navigateurs cherchent un
   nouveau chemin réseau, **sur la même connexion** (qualité, pause, aveugle… sont conservés). Le spectateur peut
@@ -529,7 +532,7 @@ spectateur en découle :
   sans son à un onglet avec du son (et inversement).
 - **Pause** : `sender.replaceTrack(null)` arrête l'envoi de l'image et du son (presque plus de bande passante),
   puis `replaceTrack(piste)` le relance. La connexion WebRTC reste ouverte et les spectateurs voient la dernière
-  image figée avec un bandeau « ⏸ Stream en pause ».
+  image figée avec un bandeau « Stream en pause ».
 - Pendant la pause, la capture continue sur ton PC (dans la version navigateur, la barre « … partage votre écran »
   de Chrome reste donc affichée) : c'est ce qui permet de reprendre sans rechoisir l'écran. Un spectateur qui arrive pendant la pause voit le
   bandeau et reçoit l'image à la reprise. « Changer d'écran » et les changements de qualité pendant la pause sont

@@ -84,11 +84,11 @@ export class ViewerConnection {
         if (/vidéo/.test(currentStatus())) setStatus("");
       } else if (state === "disconnected") {
         // Souvent passager (quelques paquets perdus) : WebRTC se rétablit souvent tout seul
-        setStatus("⚠️ Connexion vidéo instable…", true);
+        setStatus("Connexion vidéo instable…", true);
       } else if (state === "failed") {
         // La connexion vidéo a décroché : on demande au streamer de la relancer (ICE restart)
         if (this.restartRequests < 3) {
-          setStatus("⚠️ Connexion vidéo perdue, relance en cours…", true);
+          setStatus("Connexion vidéo perdue, relance en cours…", true);
           this.requestIceRestart();
         } else {
           setStatus("Impossible de rétablir la connexion directe (réseau trop restrictif ?).", true);

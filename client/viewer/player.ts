@@ -1,6 +1,7 @@
 // Lecteur du spectateur : la vidéo, le son, le plein écran et le bandeau pause / aveugle.
 
 import { $ } from "../core/dom.js";
+import { setIconText } from "../core/icons.js";
 
 export class Player {
   private readonly video = $<HTMLVideoElement>("remote");
@@ -54,7 +55,8 @@ export class Player {
   private updateBanner() {
     const banner = $("video-banner");
     banner.hidden = !this.paused && !this.blinded;
-    banner.textContent = this.blinded ? "🙈 Le streamer a masqué l'image pour toi" : "⏸ Stream en pause";
+    if (this.blinded) setIconText(banner, "eye-off", "Le streamer a masqué l'image pour toi");
+    else setIconText(banner, "pause", "Stream en pause");
   }
 
   // Le son est activé dès l'arrivée du stream. Les navigateurs refusent normalement la lecture AVEC
@@ -73,6 +75,7 @@ export class Player {
   }
 
   private syncMuteButton() {
-    $("unmute-btn").textContent = this.video.muted ? "🔊 Activer le son" : "🔇 Couper le son";
+    if (this.video.muted) setIconText($("unmute-btn"), "volume", "Activer le son");
+    else setIconText($("unmute-btn"), "volume-off", "Couper le son");
   }
 }

@@ -3,6 +3,7 @@
 
 import type { AudioCaptureApi } from "../../shared/app-bridge.js";
 import { $ } from "../core/dom.js";
+import { setIconText } from "../core/icons.js";
 import { loadPref, savePref } from "../core/prefs.js";
 import { StreamAudioMixer } from "../desktop/audio-mixer.js";
 
@@ -21,7 +22,7 @@ export function setupAudioPanel(app: AudioCaptureApi): AudioPanel {
   const audioToggle = $("audio-toggle");
   const setAudioExpanded = (expanded: boolean) => {
     audioBody.hidden = !expanded;
-    audioToggle.textContent = expanded ? "▾ Réduire" : "▸ Agrandir";
+    setIconText(audioToggle, expanded ? "chevron-down" : "chevron-right", expanded ? "Réduire" : "Agrandir");
     audioToggle.setAttribute("aria-expanded", String(expanded));
     savePref("audioExpanded", String(expanded));
   };

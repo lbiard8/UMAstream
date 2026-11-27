@@ -83,7 +83,7 @@ export function createHandlers({ rooms, ipOf, isLocal, shareInfo, port }: Handle
         return send(ws, { type: "error", message: "Trop de tentatives, attends une minute." });
       }
       const room = rooms.room(msg.roomId);
-      if (!room) return send(ws, { type: "error", message: "Ce salon n'existe pas (ou le stream est terminé)" });
+      if (!room) return send(ws, { type: "room-not-found" }); // lien faux, ou stream terminé
 
       const blockedFor = limiter.blockedFor(ip);
       if (blockedFor > 0) {
@@ -126,7 +126,7 @@ export function createHandlers({ rooms, ipOf, isLocal, shareInfo, port }: Handle
 
         // Le salon a pu fermer pendant la vérification
         const current = rooms.room(msg.roomId);
-        if (!current) return send(ws, { type: "error", message: "Le stream vient de se terminer" });
+        if (!current) return send(ws, { type: "room-not-found" }); // le stream vient de se terminer
         if (current.pending.size >= MAX_PENDING_PER_ROOM) {
           return send(ws, { type: "error", message: "Trop de demandes en attente, réessaie dans un moment." });
         }
