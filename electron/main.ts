@@ -133,7 +133,9 @@ async function start() {
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(localUrl)) {
+    // On compare l'origine EXACTE (protocole + nom + port) : « commence par http://localhost:3000 »
+    // laisserait passer http://localhost:3000@autre-site.com, qui mène en réalité sur autre-site.com.
+    if (!isAppPage(url)) {
       event.preventDefault();
       void shell.openExternal(url);
     }
@@ -154,3 +156,12 @@ app.on("will-quit", async () => {
   }
 });
 
+
+/** L'adresse est-elle une page de l'appli (même origine que le serveur intégré) ? */
+function isAppPage(url: string): boolean {
+  try {
+    return new URL(url).origin === new URL(localUrl).origin;
+  } catch {
+    return false; // adresse illisible : on ne la charge pas dans l'appli
+  }
+}

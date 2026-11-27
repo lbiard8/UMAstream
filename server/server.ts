@@ -15,6 +15,7 @@ import type { ShareReach } from "../shared/messages.js";
 import { EMBEDDED, LOCAL_URL, PORT, PUBLIC_DIR, WANT_OPEN, WANT_TUNNEL } from "./config.js";
 import { getLanIp, startTunnel } from "./network.js";
 import { openBrowser } from "./open-browser.js";
+import { allowedOrigins } from "./origin.js";
 import { startSignaling } from "./signaling.js";
 import { staticFiles } from "./static-files.js";
 
@@ -38,7 +39,11 @@ export const serverReady = new Promise<{ port: number; tunnelUrl: string | null 
 });
 
 const httpServer = createServer(staticFiles(PUBLIC_DIR));
-const wss = startSignaling(httpServer, { port: PORT, shareInfo });
+const wss = startSignaling(httpServer, {
+  port: PORT,
+  shareInfo,
+  allowedOrigins: () => allowedOrigins(PORT, lanIp, tunnelUrl),
+});
 
 // Port déjà utilisé : le plus souvent, UMAstream tourne déjà (double-clic sur l'icône alors qu'il est
 // ouvert). Au lieu de planter, on ouvre la page existante et on s'arrête proprement.

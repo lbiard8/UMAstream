@@ -8,6 +8,7 @@ import { dispatch } from "../shared/dispatch.js";
 import { clientIp, isFromThisPc } from "./client-ip.js";
 import { createHandlers } from "./handlers.js";
 import { KeepAlive } from "./keepalive.js";
+import { isAllowedOrigin } from "./origin.js";
 import { ConnectionCounter, MAX_CONNECTIONS_PER_IP, MAX_CONNECTIONS_TOTAL } from "./limits.js";
 import { RoomRegistry } from "./rooms.js";
 import { send } from "./send.js";
@@ -21,9 +22,14 @@ const MAX_MESSAGE_BYTES = 64 * 1024;
 export interface SignalingOptions {
   port: number;
   shareInfo(): { shareBase?: string; reach: ShareReach };
+  /** Pages autorisées à se connecter (voir origin.ts) : la liste change quand le tunnel s'ouvre. */
+  allowedOrigins(): string[];
 }
 
-export function startSignaling(httpServer: Server, { port, shareInfo }: SignalingOptions): WebSocketServer {
+export function startSignaling(
+  httpServer: Server,
+  { port, shareInfo, allowedOrigins }: SignalingOptions,
+): WebSocketServer {
   const wss = new WebSocketServer({ server: httpServer, maxPayload: MAX_MESSAGE_BYTES });
   const keepAlive = new KeepAlive(wss);
   const rooms = new RoomRegistry();
@@ -52,6 +58,13 @@ export function startSignaling(httpServer: Server, { port, shareInfo }: Signalin
     ws.on("error", (err) => {
       console.warn(`Connexion fermée sur erreur (${ip}) : ${err.message}`);
     });
+
+    // La connexion doit venir d'une page UMAstream (voir origin.ts), pas d'un autre site
+    if (!isAllowedOrigin(req.headers.origin, allowedOrigins())) {
+      console.warn(`Connexion refusée (${ip}) : page d'un autre site (${req.headers.origin})`);
+      ws.close(1008, "Origine refusée");
+      return;
+    }
 
     // Plafonds de connexions : au-delà, on explique pourquoi et on ferme (code 1008 = "règle non respectée")
     const refuse = (message: string) => {
